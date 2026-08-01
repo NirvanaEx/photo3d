@@ -32,9 +32,15 @@ def render_turntable(
     out_dir: Path,
     views: int = config.DEFAULT_VIEWS,
     res: int = config.PREVIEW_RES,
-    style: str = "clay",
+    style: str = "",
 ) -> tuple[list[Path], str, str]:
-    """Возвращает (кадры, использованный движок, лог)."""
+    """Возвращает (кадры, использованный движок, лог).
+
+    Пустой style означает «взять из конфига», а не «глина». Раньше здесь
+    стояла глина, и после подключения TRELLIS это стало вредно: модели с
+    PBR-материалами возвращались однородно серыми.
+    """
+    style = style or config.PREVIEW_STYLE
     out_dir.mkdir(parents=True, exist_ok=True)
     if not config.BLENDER.exists():
         raise BlenderFailed(

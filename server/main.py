@@ -193,18 +193,20 @@ async def photo_to_3d(
 
 @mcp.tool(annotations=READ_ONLY)
 async def render_model(model_id: str = "last", views: int = 4, res: int = 0,
-                       style: str = "clay") -> list:
+                       style: str = "") -> list:
     """Перерендерить превью модели и показать картинки.
 
     style задаёт, что именно смотрим:
+      beauty - полноценная сцена: три источника света, подложка с тенью.
+               Идёт по умолчанию: у моделей TRELLIS настоящие PBR-материалы,
+               и показывать их надо со светом
       clay   - серая глина с подчёркиванием впадин, без света. Для оценки ФОРМЫ:
                настоящее освещение прячет дыры и складки за бликами
-      color  - показать материал и текстуру, быстро и без света
-      beauty - полноценная сцена: три источника света, подложка с тенью.
-               Для показа результата. Медленнее остальных
+      color  - материал и текстура без света, вдвое быстрее beauty
 
     res: 0 - размер по умолчанию (512). Больше - подробнее, но тяжелее контекст.
     """
+    style = style or config.PREVIEW_STYLE
     if style not in render.STYLE_ENGINES:
         raise PipelineError("render", f"стиль {style!r} неизвестен",
                             hint="доступны: " + ", ".join(render.STYLE_ENGINES))
@@ -414,7 +416,7 @@ async def smooth_model(
                             hint="сгенерируй её заново через photo_to_3d")
 
     meta = store.meta(mid)
-    use_style = style or meta.get("style") or "clay"
+    use_style = style or meta.get("style") or config.PREVIEW_STYLE
     if use_style not in render.STYLE_ENGINES:
         raise PipelineError("smooth", f"стиль {use_style!r} неизвестен",
                             hint="доступны: " + ", ".join(render.STYLE_ENGINES))
@@ -489,7 +491,7 @@ async def prepare_for_sculpting(
                             hint="сгенерируй её заново через photo_to_3d")
 
     src_meta = store.meta(src_id)
-    use_style = style or src_meta.get("style") or "clay"
+    use_style = style or src_meta.get("style") or config.PREVIEW_STYLE
     if use_style not in render.STYLE_ENGINES:
         raise PipelineError("sculpt", f"стиль {use_style!r} неизвестен",
                             hint="доступны: " + ", ".join(render.STYLE_ENGINES))

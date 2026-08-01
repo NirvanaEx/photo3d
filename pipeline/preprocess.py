@@ -42,8 +42,24 @@ def cutout(src: Path, dst: Path, model: str = "") -> dict[str, Any]:
     from rembg import remove
 
     model = model or config.REMBG_MODEL
-    img = Image.open(src).convert("RGB")
-    out = remove(img, session=_session(model))
+    img = Image.open(src)
+
+    # Если фон уже снят, второй раз не режем. Готовая альфа почти всегда
+    # точнее нашей: её либо нарисовали, либо получили в графическом
+    # редакторе. Прежняя версия делала convert("RGB") первым же действием и
+    # молча выбрасывала эту информацию - на примерах из репозитория TRELLIS,
+    # которые все идут с прозрачным фоном, это была чистая порча.
+    source = "rembg"
+    if img.mode == "RGBA":
+        alpha = np.asarray(img)[:, :, 3]
+        if alpha.min() < 250:          # альфа осмысленная, а не сплошная
+            out = img
+            source = "готовая альфа"
+        else:
+            out = remove(img.convert("RGB"), session=_session(model))
+    else:
+        out = remove(img.convert("RGB"), session=_session(model))
+
     if out.mode != "RGBA":
         out = out.convert("RGBA")
 
@@ -68,7 +84,8 @@ def cutout(src: Path, dst: Path, model: str = "") -> dict[str, Any]:
     out.save(dst)
 
     return {
-        "модель": model,
+        "источник_маски": source,
+        "модель": model if source == "rembg" else None,
         "доля_кадра": round(covered, 4),
         "габарит_силуэта": [int(xs.max() - xs.min() + 1), int(ys.max() - ys.min() + 1)],
         "кадр": list(img.size),
