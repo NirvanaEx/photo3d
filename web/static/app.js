@@ -313,8 +313,17 @@ function drawGrid() {
 
   // Матрицы обновляем сами: рендерер делает это каждый кадр, но сетка может
   // рисоваться и до его первого прохода.
+  // updateMatrixWorld безопасен — рендерер делает то же каждый кадр.
+  // А вот updateProjectionMatrix здесь НЕ вызывается: он пересобрал бы
+  // матрицу из fov/aspect и стёр бы всё, что model-viewer мог в неё
+  // положить сам. Читаем как есть.
+  // Если камера ещё не подхватила размер окна, её матрица проекции считает
+  // по другому аспекту — сетка уедет вбок относительно модели. Такое бывает
+  // между изменением размера и первым кадром рендерера. Лучше пропустить
+  // кадр: следующее camera-change всё равно перерисует.
+  if (Math.abs(cam.aspect - w / h) > 0.03) return;
+
   cam.updateMatrixWorld(true);
-  cam.updateProjectionMatrix();
   const inv = cam.matrixWorld.clone().invert();
   const near = Math.max(cam.near || 0.001, 1e-5);
 
@@ -337,16 +346,18 @@ function drawGrid() {
   // Шаг — «круглое» число, чтобы модель занимала около шести клеток
   const raw = span / 6;
   const pow = Math.pow(10, Math.floor(Math.log10(raw)));
-  const cell = [1, 2, 5, 10].map((m) => m * pow)
+  let cell = [1, 2, 5, 10].map((m) => m * pow)
     .reduce((a, b) => (Math.abs(b - raw) < Math.abs(a - raw) ? b : a));
 
-  // Размер поля растёт вместе с удалением камеры: иначе при отдалении
-  // сетка превращается в пятачок посреди пустоты.
-  const dist = cam.position.distanceTo
-    ? cam.position.distanceTo(sc.target.position) : span * 3;
-  const half = Math.max(span * 3, dist * 1.4);
-  const N = Math.min(Math.ceil(half / cell), 80);
-  const ext = N * cell;
+  // Поле заметно больше расстояния до камеры: край сетки не должен попадать
+  // в кадр — иначе пол читается как висящая в пустоте площадка, а не как пол.
+  const dist = cam.position.length ? cam.position.length() : span * 4;
+  const half = Math.max(span * 4, dist * 7);
+  // Клетку укрупняем, пока число линий не станет разумным. Так сетка
+  // подстраивается под масштаб, как в 3D-редакторах, вместо того чтобы
+  // при отдалении превращаться в сплошную заливку.
+  while ((2 * half) / cell > 130) cell *= (cell.toString()[0] === "1" ? 2 : 2.5);
+  const N = Math.ceil(half / cell);
 
   const seg = (ax, ay, az, bx, by, bz, alpha, width) => {
     let A = toView(ax, ay, az);
@@ -375,15 +386,16 @@ function drawGrid() {
   ctx.lineCap = "butt";
   for (let i = -N; i <= N; i++) {
     const t = i * cell;
-    // Дальние линии гасим, иначе у горизонта они сливаются в кашу
-    const fade = Math.pow(Math.max(0, 1 - Math.abs(i) / N), 1.4);
+    if (Math.abs(t) >= half) continue;
+    // Линии обрезаются по КРУГУ, а не по квадрату: у квадрата в кадр попадает
+    // прямой угол, и пол читается как площадка с краем.
+    const L = Math.sqrt(half * half - t * t);
     const axis = i === 0;
     const major = i % 5 === 0;
-    const alpha = (axis ? 0.55 : major ? 0.40 : 0.20) * fade;
-    if (alpha < 0.012) continue;
+    const alpha = axis ? 0.55 : major ? 0.42 : 0.22;
     const width = axis ? 1.4 : major ? 1.1 : 0.8;
-    seg(cx + t, floorY, cz - ext, cx + t, floorY, cz + ext, alpha, width);
-    seg(cx - ext, floorY, cz + t, cx + ext, floorY, cz + t, alpha, width);
+    seg(cx + t, floorY, cz - L, cx + t, floorY, cz + L, alpha, width);
+    seg(cx - L, floorY, cz + t, cx + L, floorY, cz + t, alpha, width);
   }
 
   // Круг под моделью: показывает точку опоры и сразу читается как «низ»
@@ -404,6 +416,42 @@ function drawGrid() {
   }
   ctx.stroke();
   ctx.globalAlpha = 1;
+
+  // Растворение вместо обрезки. Даже круглое поле имеет край, и в кадре он
+  // выглядит границей пола. Гасим готовую сетку радиальным градиентом от
+  // основания модели — тогда она уходит в ничто и читается бесконечной.
+  const baseView = toView(cx, floorY, cz);
+  const base = -baseView[2] > near ? viewToScreen(baseView) : [w / 2, h * 0.62];
+
+  ctx.globalCompositeOperation = "destination-in";
+
+  // 1. По глубине. Вдали линии сходятся и сливаются в сплошную заливку,
+  // поэтому дальний план надо гасить сильнее ближнего. Ориентир — экранная
+  // высота точки на полу в отдалении: она и задаёт направление «вглубь».
+  const away = Math.hypot(cam.position.x, cam.position.z) > 1e-6
+    ? [-cam.position.x, -cam.position.z] : [0, -1];
+  const alen = Math.hypot(away[0], away[1]) || 1;
+  const farView = toView(cx + away[0] / alen * half * 0.5, floorY,
+                         cz + away[1] / alen * half * 0.5);
+  const far = -farView[2] > near ? viewToScreen(farView) : [w / 2, -h];
+  const depth = ctx.createLinearGradient(0, base[1], 0, far[1]);
+  depth.addColorStop(0, "rgba(0,0,0,1)");
+  depth.addColorStop(0.35, "rgba(0,0,0,0.55)");
+  depth.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = depth;
+  ctx.fillRect(0, 0, w, h);
+
+  // 2. По радиусу — чтобы сетка не обрывалась краем по бокам и снизу.
+  const R = Math.hypot(w, h) * 0.72;
+  const radial = ctx.createRadialGradient(base[0], base[1], R * 0.10,
+                                          base[0], base[1], R);
+  radial.addColorStop(0, "rgba(0,0,0,1)");
+  radial.addColorStop(0.5, "rgba(0,0,0,0.9)");
+  radial.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = radial;
+  ctx.fillRect(0, 0, w, h);
+
+  ctx.globalCompositeOperation = "source-over";
 }
 
 function scheduleGrid() {

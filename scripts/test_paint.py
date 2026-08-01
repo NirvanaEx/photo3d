@@ -16,15 +16,20 @@ async def main() -> int:
     from server.store import ModelStore
 
     store = ModelStore()
-    mid = sys.argv[1] if len(sys.argv) > 1 else store.resolve("last")
+    # resolve, а не сырой аргумент: "last" понимает только он, и без этого
+    # скрипт падал на store.meta("last") уже ПОСЛЕ успешной покраски
+    mid = store.resolve(sys.argv[1] if len(sys.argv) > 1 else "last")
     color = sys.argv[2] if len(sys.argv) > 2 else "терракота"
     print(f"модель {mid}, цвет {color}\n")
 
     t = time.time()
-    res = await mcp.call_tool("paint_model", {
-        "model_id": mid, "color": color,
-        "metallic": 0.0, "roughness": 0.45, "style": "beauty",
-    })
+    # «фото» вместо цвета — проверить путь с настоящей картинкой в материале
+    args = {"model_id": mid, "metallic": 0.0, "roughness": 0.45, "style": "beauty"}
+    if color == "фото":
+        args["from_photo"] = True
+    else:
+        args["color"] = color
+    res = await mcp.call_tool("paint_model", args)
     blocks = getattr(res, "content", res)
     kinds: dict[str, int] = {}
     for b in blocks:

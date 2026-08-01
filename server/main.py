@@ -25,7 +25,9 @@ import anyio
 from mcp.server.mcpserver import Image, MCPServer
 from mcp.types import ToolAnnotations
 
+from pipeline import bake
 from pipeline import paint as paint_mod
+from pipeline import smooth as smooth_mod
 from pipeline import render, sculpt
 from pipeline.engines import get_engine
 from server import config
@@ -381,9 +383,83 @@ def export_model(model_id: str = "last", dest: str = "") -> str:
 
 
 @mcp.tool(annotations=GENERATES)
+async def smooth_model(
+    model_id: str = "last",
+    strength: float = 0.6,
+    iterations: int = 12,
+    subdivide: int = 0,
+    method: str = "preserve",
+    style: str = "",
+) -> list:
+    """Сгладить модель и показать результат.
+
+    Убирает гранёность, ступеньки и рваный контур. Меняет модель НА МЕСТЕ,
+    материал и покраска сохраняются — открытый веб-интерфейс перерисует
+    именно её.
+
+    strength:   0..1, сила сглаживания
+    iterations: сколько проходов; больше — глаже и медленнее
+    subdivide:  0..3 уровня подразделения ПЕРЕД сглаживанием. Делает силуэт
+                по-настоящему круглым, но каждый уровень учетверяет число
+                граней — на плотной сетке лучше оставить 0
+    method:     preserve — бережно, силуэт почти не «сдувается»;
+                simple — сильнее, но модель немного усыхает
+    style:      чем перерисовать превью; пусто — оставить прежний стиль модели
+    """
+    mid = store.resolve(model_id)
+    mdir = store.dir(mid)
+    glb = store.glb(mid)
+    if not glb.exists():
+        raise PipelineError("smooth", f"у модели {mid} нет model.glb",
+                            hint="сгенерируй её заново через photo_to_3d")
+
+    meta = store.meta(mid)
+    use_style = style or meta.get("style") or "clay"
+    if use_style not in render.STYLE_ENGINES:
+        raise PipelineError("smooth", f"стиль {use_style!r} неизвестен",
+                            hint="доступны: " + ", ".join(render.STYLE_ENGINES))
+    started = time.time()
+
+    def _work():
+        st = smooth_mod.smooth(glb, glb, strength=strength, iterations=iterations,
+                               subdivide=subdivide, method=method)
+        frames, rengine, rlog = render.render_turntable(
+            glb, mdir / "views", views=config.SPIN_FRAMES,
+            res=config.PREVIEW_RES, style=use_style,
+        )
+        return st, frames, rengine, rlog
+
+    st, frames, rengine, rlog = await anyio.to_thread.run_sync(_work)
+    store.log(mid, st.get("log", ""))
+    store.log(mid, rlog)
+
+    stats = meta.get("stats", {})
+    stats.update({"vertices": st["after"]["vertices"], "faces": st["after"]["faces"]})
+    meta.update({"stats": stats, "render_engine": rengine,
+                 "views": len(frames), "style": use_style,
+                 "smooth": {"strength": strength, "iterations": iterations,
+                            "subdivide": subdivide, "method": method}})
+    store.write_meta(mid, meta)
+
+    shrink = st.get("shrink_percent", [0, 0, 0])
+    return [
+        f"{mid} сглажена на месте: {method}, сила {strength}, "
+        f"проходов {iterations}, подразделений {subdivide}\n"
+        f"геометрия: {st['before']['faces']} → {st['after']['faces']} граней, "
+        f"{st['before']['vertices']} → {st['after']['vertices']} вершин\n"
+        f"усадка габаритов: {shrink[0]}% / {shrink[1]}% / {shrink[2]}% по осям\n"
+        f"превью перерисовано стилем {use_style} ({rengine}) за "
+        f"{time.time() - started:.1f} c",
+        *_view_images(mid),
+    ]
+
+
+@mcp.tool(annotations=GENERATES)
 async def prepare_for_sculpting(
     model_id: str = "last",
     target_faces: int = 5000,
+    keep_texture: bool = True,
+    style: str = "",
 ) -> list:
     """Превратить модель в базовую сетку, пригодную для лепки, и показать её.
 
@@ -396,14 +472,27 @@ async def prepare_for_sculpting(
     Результат сохраняется отдельной моделью, исходная остаётся нетронутой —
     их удобно сравнивать рядом.
 
-    target_faces: плотность базовой сетки. 3000–8000 — типичный диапазон:
-                  достаточно грубо, чтобы подразделять вверх при лепке.
+    target_faces:  плотность базовой сетки. 3000–8000 — типичный диапазон:
+                   достаточно грубо, чтобы подразделять вверх при лепке.
+    keep_texture:  перенести внешний вид с исходной модели. Перестройка даёт
+                   новую сетку, к которой старая развёртка не относится, так
+                   что без переноса покраска и текстура теряются. Однородный
+                   материал копируется мгновенно, текстурный запекается.
+    style:         чем перерисовать превью. Пусто — унаследовать стиль
+                   исходной модели: иначе перенесённая покраска показывалась бы
+                   глиняной, и было бы неясно, уцелела она или нет.
     """
     src_id = store.resolve(model_id)
     src_glb = store.glb(src_id)
     if not src_glb.exists():
         raise PipelineError("sculpt", f"у модели {src_id} нет model.glb",
                             hint="сгенерируй её заново через photo_to_3d")
+
+    src_meta = store.meta(src_id)
+    use_style = style or src_meta.get("style") or "clay"
+    if use_style not in render.STYLE_ENGINES:
+        raise PipelineError("sculpt", f"стиль {use_style!r} неизвестен",
+                            hint="доступны: " + ", ".join(render.STYLE_ENGINES))
 
     new_id, mdir = store.create()
     started = time.time()
@@ -412,10 +501,13 @@ async def prepare_for_sculpting(
 
     def _work():
         result, info = sculpt.prepare(src_glb, mdir, target_faces=target_faces)
-        shutil.move(str(result), str(mdir / "model.glb"))
+        if keep_texture:
+            info["bake"] = bake.transfer(src_glb, result, mdir / "model.glb")
+        else:
+            shutil.move(str(result), str(mdir / "model.glb"))
         frames, rengine, rlog = render.render_turntable(
             mdir / "model.glb", mdir / "views",
-            views=config.SPIN_FRAMES, res=config.PREVIEW_RES,
+            views=config.SPIN_FRAMES, res=config.PREVIEW_RES, style=use_style,
         )
         return info, frames, rengine, rlog
 
@@ -440,6 +532,7 @@ async def prepare_for_sculpting(
         "elapsed_sec": time.time() - started,
         "render_engine": rengine,
         "views": len(frames),
+        "style": use_style,
     })
 
     lines = [
@@ -457,6 +550,22 @@ async def prepare_for_sculpting(
     ]
     if rep["skipped"]:
         lines.append("пропущенные фильтры: " + "; ".join(rep["skipped"]))
+
+    bk = info.get("bake")
+    if bk:
+        mode = {"material-copy": "материал перенесён без запекания",
+                "bake": "текстура запечена на новую развёртку",
+                "none": "переносить было нечего"}.get(bk.get("mode"), bk.get("mode"))
+        line = f"внешний вид: {mode}"
+        if bk.get("mode") == "bake":
+            line += (f", {bk.get('device', '?')}, "
+                     f"{'непустая' if bk.get('looks_baked') else 'ПУСТАЯ — проверь'}")
+        lines.append(line)
+        if bk.get("note"):
+            lines.append(f"  {bk['note']}")
+    elif not keep_texture:
+        lines.append("внешний вид НЕ переносился (keep_texture=False)")
+
     return ["\n".join(lines), *_view_images(new_id)]
 
 

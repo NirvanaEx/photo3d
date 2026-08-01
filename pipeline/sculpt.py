@@ -59,9 +59,20 @@ def _measures(ms) -> dict[str, Any]:
 def repair(src: Path, dst: Path, min_component_faces: int = 25) -> dict[str, Any]:
     """Ремонт средствами pymeshlab. Возвращает замеры до и после."""
     import pymeshlab
+    import trimesh
+
+    # В pymeshlab отдаётся ЧИСТАЯ ГЕОМЕТРИЯ, без материалов и текстур.
+    # Причина: сохраняя PLY, он пытается записать рядом и встроенную картинку,
+    # а имя без расширения (texture_0 из GLB) не понимает - падает с
+    # "has not plugin to save file format", повреждая кучу в придачу.
+    # Внешний вид здесь и не нужен: он переносится позже с оригинала
+    # средствами Blender (см. pipeline/bake.py).
+    geometry = dst.with_name("geometry_in.ply")
+    geometry.parent.mkdir(parents=True, exist_ok=True)
+    trimesh.load(src, force="mesh").export(geometry)
 
     ms = pymeshlab.MeshSet()
-    ms.load_new_mesh(str(src))
+    ms.load_new_mesh(str(geometry))
     before = _measures(ms)
     skipped: list[str] = []
 

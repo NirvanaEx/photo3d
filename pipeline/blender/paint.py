@@ -37,11 +37,19 @@ def parse_args():
     p.add_argument("--from-photo", dest="photo", default="")
     p.add_argument("--metallic", type=float, default=0.0)
     p.add_argument("--roughness", type=float, default=0.5)
+    # Прямоугольник силуэта на кадре в координатах UV: u0,v0,u1,v1
+    p.add_argument("--photo-rect", dest="rect", default="0,0,1,1")
     return p.parse_args(argv)
 
 
-def front_projection_uv(obj):
-    """UV из координат вершин: X -> U, Z -> V. Ось проекции - Y."""
+def front_projection_uv(obj, rect):
+    """UV из координат вершин: X -> U, Z -> V. Ось проекции - Y.
+
+    Габарит модели отображается не на весь кадр, а на прямоугольник силуэта.
+    Иначе поля вокруг объекта (у фотографии на светлом фоне это заметная доля
+    кадра) ложатся на края модели, и она получается по краям цвета фона.
+    """
+    u0, v0, u1, v1 = rect
     mesh = obj.data
     verts = [obj.matrix_world @ v.co for v in mesh.vertices]
     xs = [v.x for v in verts]
@@ -54,7 +62,10 @@ def front_projection_uv(obj):
     uv = mesh.uv_layers.new(name="front_projection")
     for loop in mesh.loops:
         v = verts[loop.vertex_index]
-        uv.data[loop.index].uv = ((v.x - minx) / w, (v.z - minz) / h)
+        uv.data[loop.index].uv = (
+            u0 + (v.x - minx) / w * (u1 - u0),
+            v0 + (v.z - minz) / h * (v1 - v0),
+        )
     mesh.uv_layers.active = uv
     return uv
 
@@ -114,11 +125,19 @@ def main():
         image = bpy.data.images.load(a.photo)
         image.pack()   # иначе текстура не уедет внутрь GLB
 
+    try:
+        rect = tuple(float(x) for x in a.rect.split(","))
+        if len(rect) != 4:
+            raise ValueError
+    except ValueError:
+        print(f"PAINT_ERROR: не разобрать --photo-rect {a.rect!r}")
+        sys.exit(1)
+
     for obj in meshes:
         bpy.context.view_layer.objects.active = obj
         uv_name = None
         if image is not None:
-            uv_name = front_projection_uv(obj).name
+            uv_name = front_projection_uv(obj, rect).name
         mat = make_material("painted", base, a.metallic, a.roughness, image, uv_name)
         obj.data.materials.clear()
         obj.data.materials.append(mat)
