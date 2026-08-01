@@ -14,14 +14,17 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import mimetypes
 import os
+import secrets
 from pathlib import Path
 
 import uvicorn
 from sse_starlette.sse import EventSourceResponse
 from starlette.applications import Starlette
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import FileResponse, JSONResponse, PlainTextResponse
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
@@ -108,7 +111,17 @@ async def model_file(request):
     """Раздача файлов модели с защитой от выхода за пределы её папки."""
     mid = request.path_params["mid"]
     rel = request.path_params["path"]
+
+    # Проверяется НЕ только rel, но и сам mid. Он приходит одним сегментом,
+    # поэтому косых черт в нём не бывает, но ".." - вполне: тогда base
+    # уезжает на уровень выше, а нижняя проверка сравнивает уже с уехавшей
+    # base и пропускает соседние папки data/. Пока сервер слушал только
+    # localhost, это было безобидно; при выносе наружу - нет.
+    root = config.OUTPUT_DIR.resolve()
     base = (config.OUTPUT_DIR / mid).resolve()
+    if not str(base).startswith(str(root) + os.sep):
+        return PlainTextResponse("not found", status_code=404)
+
     try:
         target = (base / rel).resolve()
     except (OSError, ValueError):
@@ -118,20 +131,71 @@ async def model_file(request):
     return FileResponse(target)
 
 
-app = Starlette(routes=[
-    Route("/", index),
-    Route("/api/models", api_models),
-    Route("/api/events", api_events),
-    Route("/files/{mid}/{path:path}", model_file),
-    Mount("/static", StaticFiles(directory=str(STATIC))),
-])
+class BasicAuth(BaseHTTPMiddleware):
+    """Пароль на весь интерфейс. Включается только когда задан PHOTO3D_WEB_PASSWORD.
+
+    Сравнение через compare_digest, а не ==: обычное сравнение строк
+    прекращается на первом различии, и по времени ответа пароль подбирается
+    посимвольно. Здесь это скорее принцип, чем реальная угроза, но делать
+    правильно дешевле, чем объяснять, почему не сделал.
+    """
+
+    def __init__(self, app, password: str) -> None:
+        super().__init__(app)
+        self._password = password
+
+    async def dispatch(self, request, call_next):
+        header = request.headers.get("authorization", "")
+        if header.startswith("Basic "):
+            try:
+                raw = base64.b64decode(header[6:]).decode("utf-8", "replace")
+                _, _, given = raw.partition(":")
+            except Exception:  # noqa: BLE001
+                given = ""
+            if secrets.compare_digest(given, self._password):
+                return await call_next(request)
+        return PlainTextResponse(
+            "нужен пароль", status_code=401,
+            headers={"WWW-Authenticate": 'Basic realm="photo3d"'})
+
+
+def build_app() -> Starlette:
+    routes = [
+        Route("/", index),
+        Route("/api/models", api_models),
+        Route("/api/events", api_events),
+        Route("/files/{mid}/{path:path}", model_file),
+        Mount("/static", StaticFiles(directory=str(STATIC))),
+    ]
+    application = Starlette(routes=routes)
+    password = os.environ.get("PHOTO3D_WEB_PASSWORD", "")
+    if password:
+        application.add_middleware(BasicAuth, password=password)
+    return application
+
+
+app = build_app()
 
 
 def main() -> None:
     port = int(os.environ.get("PHOTO3D_WEB_PORT", "8765"))
-    # 127.0.0.1, а не 0.0.0.0: интерфейс без аутентификации, наружу ему нельзя.
-    # Windows достучится через localhostForwarding в WSL2.
-    uvicorn.run(app, host="127.0.0.1", port=port, log_level="info")
+    host = os.environ.get("PHOTO3D_WEB_HOST", "127.0.0.1")
+    password = os.environ.get("PHOTO3D_WEB_PASSWORD", "")
+
+    # Слушать не только localhost можно ТОЛЬКО с паролем. Иначе интерфейс
+    # уходит наружу открытым, а он отдаёт файлы моделей и исходные снимки.
+    # Проверка тут, а не в напоминании в README: забыть переменную окружения
+    # легко, а последствия молчаливые.
+    if host not in ("127.0.0.1", "localhost", "::1") and not password:
+        raise SystemExit(
+            f"отказ: host={host} выставляет интерфейс за пределы машины, "
+            "а PHOTO3D_WEB_PASSWORD не задан.\n"
+            "Задай пароль или оставь host=127.0.0.1"
+        )
+
+    where = "с паролем" if password else "без пароля, только локально"
+    print(f"photo3d web: http://{host}:{port} ({where})", flush=True)
+    uvicorn.run(app, host=host, port=port, log_level="info")
 
 
 if __name__ == "__main__":
