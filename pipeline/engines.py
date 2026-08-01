@@ -178,10 +178,123 @@ class StubEngine:
         }
 
 
+# --------------------------------------------------------------------------- #
+# TRELLIS.2
+# --------------------------------------------------------------------------- #
+
+# Разрешение текстуры и предел упрощения по режимам. Разрешение объёма
+# не трогаем: весов кроме 512 у нас нет.
+_MODES = {
+    "fast": {"texture": 1024, "decimation": 150_000},
+    "quality": {"texture": 2048, "decimation": 300_000},
+}
+
+
+class TrellisEngine:
+    """Настоящая генерация: TRELLIS.2 в контейнере с прокинутой видеокартой.
+
+    Почему через docker, а не в общем venv: пяти CUDA-расширениям нужен nvcc,
+    то есть CUDA Toolkit целиком, и своя версия torch. Смешивать это с
+    рабочим окружением, где живут Blender и pymeshlab, - напрашиваться на
+    конфликт версий, который проявится в самый неудобный момент.
+
+    Скрипт монтируется с хоста, а не лежит в образе: правка логики генерации
+    не должна стоить пересборки на десятки минут.
+    """
+
+    name = "trellis"
+    needs_gpu = True
+
+    def generate(
+        self, image_path: Path, out_glb: Path, seed: int = 42, mode: str = "quality"
+    ) -> dict[str, Any]:
+        import json
+        import os
+        import subprocess
+
+        from server import config
+        from server.errors import PipelineError
+        from pipeline import preprocess
+
+        params = _MODES.get(mode, _MODES["quality"])
+        workdir = out_glb.parent
+        workdir.mkdir(parents=True, exist_ok=True)
+
+        # Фон снимаем на хосте: внутри контейнера модель для этого намеренно
+        # не установлена, см. pipeline/trellis/run_trellis.py
+        cut = workdir / "input_rgba.png"
+        cut_info = preprocess.cutout(image_path, cut)
+
+        cmd = [
+            "docker", "run", "--rm", "--gpus", "all",
+            # uid хоста: иначе результат окажется во владении root, и его
+            # потом не перезаписать из-под обычного пользователя
+            "--user", f"{os.getuid()}:{os.getgid()}",
+            "--shm-size", "2g",
+            "-v", f"{config.TRELLIS_WEIGHTS}:/weights",
+            "-v", f"{workdir}:/work",
+            "-v", f"{config.TRELLIS_SCRIPTS}:/app:ro",
+            "-e", "HOME=/tmp",              # с --user домашняя папка недоступна
+            "-e", "HF_HOME=/weights/hf",
+            "-e", "HF_HUB_OFFLINE=1",       # в сеть за весами не ходить
+            "-e", "TRANSFORMERS_OFFLINE=1",
+            config.TRELLIS_IMAGE,
+            "python", "/app/run_trellis.py",
+            "--in", f"/work/{cut.name}",
+            "--out", f"/work/{out_glb.name}",
+            "--seed", str(seed),
+            "--pipeline-type", config.TRELLIS_PIPELINE_TYPE,
+            "--texture-size", str(params["texture"]),
+            "--decimation-target", str(params["decimation"]),
+        ]
+
+        proc = subprocess.run(cmd, capture_output=True, text=True,
+                              timeout=config.TRELLIS_TIMEOUT_SEC)
+        out = (proc.stdout or "") + "\n" + (proc.stderr or "")
+
+        report: dict[str, Any] = {}
+        for line in out.splitlines():
+            if line.startswith("TRELLIS_RESULT "):
+                report = json.loads(line[len("TRELLIS_RESULT "):])
+
+        if proc.returncode != 0 or not report or not out_glb.exists():
+            raise PipelineError("generate", _diagnose(out, proc.returncode),
+                                hint="полный вывод в log.txt папки модели")
+
+        report["фон"] = cut_info
+        report["log"] = out
+        return report
+
+
+def _diagnose(out: str, code: int) -> str:
+    """Превратить вывод контейнера во внятную причину.
+
+    Смысл в том, чтобы ответ содержал следующее действие, а не только факт
+    неудачи: эти три случая - самые частые и лечатся по-разному.
+    """
+    if "out of memory" in out.lower() or "OutOfMemoryError" in out:
+        return ("не хватило видеопамяти. Уменьши texture_size или запусти "
+                "в режиме fast; проверь, что видеокарту не занимает "
+                "браузер или другой процесс")
+    if "GatedRepoError" in out or "gated" in out.lower():
+        return ("нет доступа к DINOv3. Запроси его на "
+                "https://huggingface.co/facebook/dinov3-vitl16-pretrain-lvd1689m, "
+                "затем `hf auth login` и scripts/fetch_trellis.py")
+    if "Unable to find image" in out or "No such image" in out:
+        return ("образ контейнера не собран: "
+                "docker build -t photo3d/trellis:1 docker/")
+    if "could not select device driver" in out.lower():
+        return "docker не видит видеокарту: не настроен nvidia-container-toolkit"
+    tail = [l for l in out.splitlines() if l.strip()][-3:]
+    return f"генерация не удалась (код {code}): " + " | ".join(tail)
+
+
 def get_engine(name: str) -> Engine:
     if name == "stub":
         return StubEngine()
+    if name == "trellis":
+        return TrellisEngine()
     raise ValueError(
-        f"движок {name!r} неизвестен. Сейчас доступен только 'stub'; "
-        "'trellis' появится после сборки GPU-контейнера"
+        f"движок {name!r} неизвестен. Доступны 'stub' (без GPU) и "
+        "'trellis' (TRELLIS.2 в контейнере)"
     )

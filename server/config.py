@@ -16,8 +16,36 @@ WEIGHTS_DIR = DATA / "weights"
 BLENDER = Path(os.environ.get("PHOTO3D_BLENDER", "/opt/blender/blender"))
 BLENDER_SCRIPTS = ROOT / "pipeline" / "blender"
 
-# Движок генерации: stub - заглушка без GPU, trellis - настоящий (появится позже)
+# Движок генерации: stub - заглушка без GPU, trellis - настоящий
 ENGINE = os.environ.get("PHOTO3D_ENGINE", "stub")
+
+# --------------------------------------------------------------------------- #
+# TRELLIS.2
+# --------------------------------------------------------------------------- #
+
+# Веса лежат НЕ в data/weights на диске D, а на нативной ext4, и это
+# принципиально. safetensors читаются через mmap: страницы идут из кэша ядра
+# и вытесняются под нагрузкой, поэтому 11 ГБ весов уживаются с 10 ГБ ОЗУ.
+# Через drvfs (/mnt/d) mmap так не работает, и всё упирается в память.
+TRELLIS_WEIGHTS = Path(os.environ.get("PHOTO3D_TRELLIS_WEIGHTS",
+                                      "/opt/photo3d/weights"))
+TRELLIS_IMAGE = os.environ.get("PHOTO3D_TRELLIS_IMAGE", "photo3d/trellis:1")
+TRELLIS_SCRIPTS = ROOT / "pipeline" / "trellis"
+
+# Разрешение объёма. 1024 и каскады требуют весов, которые мы не качали:
+# на 12 ГБ они всё равно не идут.
+TRELLIS_PIPELINE_TYPE = os.environ.get("PHOTO3D_TRELLIS_TYPE", "512")
+
+# У авторов в примере 4096, но это под 24 ГБ видеопамяти.
+TRELLIS_TEXTURE_SIZE = int(os.environ.get("PHOTO3D_TRELLIS_TEXTURE", "2048"))
+TRELLIS_DECIMATION = int(os.environ.get("PHOTO3D_TRELLIS_DECIMATION", "300000"))
+
+# Генерация вместе с загрузкой весов с диска идёт минуты, а не секунды.
+TRELLIS_TIMEOUT_SEC = int(os.environ.get("PHOTO3D_TRELLIS_TIMEOUT", "1800"))
+
+# Модель для снятия фона. isnet-general-use даёт заметно более чистый силуэт
+# на предметах, чем u2net по умолчанию.
+REMBG_MODEL = os.environ.get("PHOTO3D_REMBG_MODEL", "isnet-general-use")
 
 # Превью для Claude. 512 - компромисс: деталей хватает, контекст не раздувается.
 PREVIEW_RES = int(os.environ.get("PHOTO3D_PREVIEW_RES", "512"))
