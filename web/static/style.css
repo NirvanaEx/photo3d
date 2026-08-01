@@ -1,0 +1,212 @@
+:root {
+  --bg: #0e0f12;
+  --panel: #16181d;
+  --panel-2: #1c1f26;
+  --line: #262a33;
+  --text: #e6e8ec;
+  --muted: #8b93a3;
+  --accent: #6ea8fe;
+  --ok: #4ade80;
+  --warn: #fbbf24;
+  --mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+/* Атрибут hidden обязан побеждать любой display из правил ниже.
+   Иначе .lightbox{display:grid} держит чёрный оверлей поверх страницы
+   постоянно, а .viewer-empty{display:grid} — надпись поверх модели. */
+[hidden] { display: none !important; }
+
+html, body {
+  margin: 0; height: 100%;
+  background: var(--bg); color: var(--text);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+body { display: flex; flex-direction: column; }
+
+/* ---------- header ---------- */
+header {
+  flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.brand { display: flex; align-items: center; gap: 9px; font-weight: 600; letter-spacing: .2px; }
+.logo { color: var(--accent); font-size: 16px; }
+.head-right { display: flex; align-items: center; gap: 18px; }
+
+.toggle { display: flex; align-items: center; gap: 7px; color: var(--muted); cursor: pointer; user-select: none; }
+.toggle input { accent-color: var(--accent); cursor: pointer; }
+
+.live { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted); }
+.live .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.live[data-state="live"] .dot { background: var(--ok); animation: pulse 2s ease-in-out infinite; }
+.live[data-state="live"] .live-text { color: var(--ok); }
+.live[data-state="down"] .dot { background: #ef4444; }
+.live[data-state="down"] .live-text { color: #ef4444; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+
+/* вспышка при получении обновления */
+.live.flash .dot { box-shadow: 0 0 0 6px rgba(74,222,128,.18); transition: box-shadow .1s; }
+
+/* ---------- layout ---------- */
+main { flex: 1 1 auto; display: grid; grid-template-columns: 290px 1fr; min-height: 0; }
+
+#sidebar {
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+  display: flex; flex-direction: column; min-height: 0;
+}
+.aside-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 11px 14px; border-bottom: 1px solid var(--line);
+  font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted);
+}
+.count { font-family: var(--mono); }
+#list { overflow-y: auto; flex: 1 1 auto; }
+
+.empty { padding: 28px 18px; color: var(--muted); font-size: 13px; text-align: center; line-height: 1.7; }
+
+/* ---------- model card ---------- */
+.card {
+  display: grid; grid-template-columns: 54px 1fr; gap: 11px;
+  padding: 10px 12px; cursor: pointer;
+  border-bottom: 1px solid var(--line);
+  border-left: 2px solid transparent;
+}
+.card:hover { background: var(--panel-2); }
+.card.active { background: var(--panel-2); border-left-color: var(--accent); }
+.card.fresh { animation: appear .5s ease; }
+@keyframes appear {
+  from { background: rgba(110,168,254,.16); }
+  to { background: transparent; }
+}
+.card img {
+  width: 54px; height: 54px; border-radius: 6px; object-fit: cover;
+  background: #000; border: 1px solid var(--line);
+}
+.card .no-thumb {
+  width: 54px; height: 54px; border-radius: 6px; border: 1px solid var(--line);
+  display: grid; place-items: center; color: var(--muted); font-size: 18px;
+}
+.card-id { font-family: var(--mono); font-size: 12.5px; }
+.card-sub { color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+.badge {
+  display: inline-block; padding: 1px 6px; border-radius: 4px;
+  background: #2a2f3a; color: var(--muted); font-size: 10.5px;
+  font-family: var(--mono); margin-right: 5px;
+}
+.badge.stub { background: #3a3320; color: var(--warn); }
+
+/* ---------- stage ---------- */
+#stage { display: grid; grid-template-rows: 1fr auto; min-height: 0; min-width: 0; }
+
+#viewer-wrap { position: relative; min-height: 0; background: #0e0f12; overflow: hidden; }
+
+/* Студийная подложка: тёмная стена сверху, светлеющий пол снизу и мягкое
+   пятно света под моделью. Геометрии здесь нет — model-viewer умеет
+   показывать только сам GLB, поэтому «сцена» рисуется под ним градиентом. */
+#backdrop {
+  position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(85% 50% at 50% 90%, rgba(196,206,222,.17), rgba(0,0,0,0) 72%),
+    linear-gradient(to bottom,
+      #101218 0%, #15181e 40%,
+      #262a33 55%, #31363f 74%, #1d2027 100%);
+}
+#grid { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+#viewer-wrap.plain #grid { display: none; }
+
+#viewer-wrap.plain #backdrop { display: none; }
+#viewer-wrap.plain { background: radial-gradient(circle at 50% 40%, #1a1d24 0%, #0e0f12 70%); }
+
+model-viewer {
+  position: relative; z-index: 2;   /* поверх подложки и сетки */
+  width: 100%; height: 100%; --poster-color: transparent;
+}
+model-viewer:not([src]) { visibility: hidden; }
+
+.viewer-empty {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  color: var(--muted); font-size: 14px; pointer-events: none;
+}
+
+/* ---------- режимы просмотра ---------- */
+.mode-tabs {
+  position: absolute; left: 14px; top: 14px; z-index: 3;
+  display: flex; gap: 2px; padding: 3px; border-radius: 9px;
+  background: rgba(28,31,38,.85); border: 1px solid var(--line);
+}
+.mode {
+  padding: 5px 13px; border-radius: 6px; cursor: pointer;
+  background: transparent; border: none; color: var(--muted);
+  font-size: 12.5px; font-family: inherit;
+}
+.mode:hover { color: var(--text); }
+.mode.active { background: var(--panel-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--line); }
+
+#spin-stage {
+  position: absolute; inset: 0; z-index: 2; display: grid; place-items: center;
+  overflow: hidden; cursor: grab; touch-action: none;
+  background: #0e0f12;   /* кадры несут собственный фон, подложка тут лишняя */
+}
+#spin-stage.dragging { cursor: grabbing; }
+#spin-img {
+  max-width: 100%; max-height: 100%; user-select: none;
+  transform-origin: center center; will-change: transform;
+}
+
+.hint {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+  padding: 6px 13px; border-radius: 7px; z-index: 3;
+  background: rgba(28,31,38,.9); border: 1px solid var(--line);
+  color: var(--muted); font-size: 12px; pointer-events: none;
+  max-width: 80%; text-align: center;
+}
+.hint.warn { color: var(--warn); border-color: #4a3f22; }
+
+.viewer-tools { position: absolute; right: 14px; top: 14px; z-index: 3; display: flex; gap: 8px; }
+.tool {
+  width: 32px; height: 32px; border-radius: 7px; cursor: pointer;
+  background: rgba(28,31,38,.85); color: var(--text);
+  border: 1px solid var(--line); font-size: 15px; line-height: 1;
+}
+.tool:hover { background: var(--panel-2); border-color: var(--accent); }
+.tool.off { color: var(--muted); }
+
+/* ---------- panel ---------- */
+#panel { border-top: 1px solid var(--line); background: var(--panel); padding: 12px 16px 14px; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12.5px; margin-bottom: 12px; }
+.meta .k { color: var(--muted); }
+.meta .v { font-family: var(--mono); }
+.meta .v.bad { color: var(--warn); }
+.meta a { color: var(--accent); text-decoration: none; }
+.meta a:hover { text-decoration: underline; }
+
+.strip-head {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .8px;
+  color: var(--muted); margin-bottom: 8px;
+}
+.strip { display: flex; gap: 9px; overflow-x: auto; padding-bottom: 4px; }
+.strip figure { margin: 0; flex: 0 0 auto; }
+.strip img {
+  height: 92px; width: 92px; object-fit: cover; border-radius: 7px;
+  border: 1px solid var(--line); background: #000; cursor: zoom-in; display: block;
+}
+.strip img:hover { border-color: var(--accent); }
+.strip figcaption { font-size: 10.5px; color: var(--muted); text-align: center; margin-top: 4px; font-family: var(--mono); }
+
+/* ---------- lightbox ---------- */
+.lightbox {
+  position: fixed; inset: 0; background: rgba(0,0,0,.88);
+  display: grid; place-items: center; z-index: 50; cursor: zoom-out; padding: 32px;
+}
+.lightbox img { max-width: 100%; max-height: 100%; border-radius: 8px; }
+
+@media (max-width: 860px) {
+  main { grid-template-columns: 1fr; grid-template-rows: 190px 1fr; }
+  #sidebar { border-right: none; border-bottom: 1px solid var(--line); }
+}

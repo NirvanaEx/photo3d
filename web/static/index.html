@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>photo3d — просмотр моделей</title>
+<link rel="stylesheet" href="/static/style.css">
+<script type="module" src="/static/vendor/model-viewer.min.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="logo">◆</span>
+    <span>photo3d</span>
+  </div>
+  <div class="head-right">
+    <label class="toggle">
+      <input type="checkbox" id="follow" checked>
+      <span>следить за новыми</span>
+    </label>
+    <div class="live" id="live" data-state="connecting">
+      <span class="dot"></span><span class="live-text">подключение…</span>
+    </div>
+  </div>
+</header>
+
+<main>
+  <aside id="sidebar">
+    <div class="aside-head">
+      <span>Модели</span><span class="count" id="count">—</span>
+    </div>
+    <div id="list"></div>
+    <div class="empty" id="empty">
+      Пока пусто.<br>Сгенерируй модель — она появится здесь сама.
+    </div>
+  </aside>
+
+  <section id="stage">
+    <div id="viewer-wrap">
+
+      <div class="mode-tabs">
+        <button class="mode active" data-mode="3d">3D</button>
+        <button class="mode" data-mode="spin">Турнтейбл</button>
+      </div>
+
+      <!-- Подложка рисуется средствами CSS, а не геометрией: model-viewer
+           показывает только сам GLB, добавить в сцену пол через него нельзя.
+           Градиент имитирует студийный циклорамный фон, а тень под моделью
+           даёт сам вьюер (shadow-intensity). -->
+      <div id="backdrop"></div>
+
+      <!-- Сетка пола. Рисуется на canvas по фактическим параметрам камеры
+           вьюера, а не картинкой: любое статичное изображение «поехало» бы
+           при первом же повороте. Лежит под model-viewer, поэтому модель
+           перекрывает её сама. -->
+      <canvas id="grid"></canvas>
+
+      <!-- loading=eager: модель выбирают явно, ждать попадания во вьюпорт
+           незачем. Плюс ленивая загрузка завязана на IntersectionObserver и
+           не срабатывает, когда окно не композитит кадры.
+           environment-image - своя HDR-панорама со схемой света как в Blender
+           (scripts/make_studio_hdr.py), поэтому живой вьюер и рендеры
+           выглядят похоже, а не как два разных объекта.
+           max-camera-orbit ограничивает наклон: под пол камере незачем. -->
+      <model-viewer id="viewer" camera-controls auto-rotate loading="eager"
+                    environment-image="/static/studio.hdr"
+                    shadow-intensity="1.5" shadow-softness="0.85"
+                    exposure="0.95" rotation-per-second="18deg"
+                    camera-orbit="20deg 72deg auto"
+                    min-camera-orbit="auto 5deg auto"
+                    max-camera-orbit="auto 92deg auto"
+                    min-field-of-view="5deg" max-field-of-view="60deg"
+                    interaction-prompt="auto" interaction-prompt-threshold="1500"
+                    ar ar-modes="webxr scene-viewer quick-look">
+      </model-viewer>
+
+      <!-- Запасной путь и одновременно полноценный режим: вращение по готовым
+           кадрам. Не требует WebGL и показывает рельеф лучше, чем освещение
+           вьюера по умолчанию, - кадры отрендерены с подчёркиванием впадин. -->
+      <div id="spin-stage" hidden>
+        <img id="spin-img" alt="" draggable="false">
+      </div>
+
+      <div class="viewer-empty" id="viewer-empty">выбери модель слева</div>
+      <div class="hint" id="hint" hidden></div>
+
+      <div class="viewer-tools">
+        <button id="btn-zoom-in" class="tool" title="Приблизить (колесо мыши)">+</button>
+        <button id="btn-zoom-out" class="tool" title="Отдалить (колесо мыши)">−</button>
+        <button id="btn-reset" class="tool" title="Сбросить вид (двойной клик)">⌖</button>
+        <button id="btn-rotate" class="tool" title="Автовращение">⟳</button>
+        <button id="btn-scene" class="tool" title="Студийный фон и тень">◐</button>
+        <button id="btn-full" class="tool" title="Во весь экран">⛶</button>
+      </div>
+    </div>
+
+    <div id="panel">
+      <div id="meta" class="meta"></div>
+      <div class="strip-head">Ракурсы и исходник</div>
+      <div id="strip" class="strip"></div>
+    </div>
+  </section>
+</main>
+
+<div id="lightbox" class="lightbox" hidden>
+  <img id="lightbox-img" alt="">
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+# Веса моделей — 20-30 ГБ, качаются скриптом
+data/weights/*
+!data/weights/.gitkeep
+
+# Рабочие данные
+data/input/*
+!data/input/.gitkeep
+data/output/*
+!data/output/.gitkeep
+data/cache/*
+!data/cache/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Окружение
+.env
+
+# Артефакты 3D
+*.glb
+*.gltf
+*.usdz
+*.obj
+*.stl
+*.ply
+*.blend1
+
+# ОС и редакторы
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

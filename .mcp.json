@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "photo3d": {
+      "command": "wsl.exe",
+      "args": [
+        "--cd", "/mnt/d/Develop/photo3d",
+        "-e", "/opt/photo3d/venv/bin/python",
+        "-m", "server.main"
+      ]
+    }
+  }
+}

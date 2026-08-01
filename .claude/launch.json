@@ -1,0 +1,15 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "photo3d-web",
+      "runtimeExecutable": "wsl.exe",
+      "runtimeArgs": [
+        "--cd", "/mnt/d/Develop/photo3d",
+        "-e", "/opt/photo3d/venv/bin/python",
+        "-m", "web.app"
+      ],
+      "port": 8765
+    }
+  ]
+}
