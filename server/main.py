@@ -571,6 +571,65 @@ async def prepare_for_sculpting(
     return ["\n".join(lines), *_view_images(new_id)]
 
 
+def _trellis_status() -> list[str]:
+    """Готовность генератора по частям.
+
+    Одной строкой «движок trellis» не обойтись: сломаться может образ, веса,
+    кодировщик или конфиг, и лечится каждое по-своему. Проверяется наличие
+    файлов, а не запуск: status обязан отвечать мгновенно и не занимать
+    видеокарту.
+    """
+    import json
+    import subprocess
+
+    out: list[str] = ["TRELLIS.2:"]
+    main = config.TRELLIS_WEIGHTS / "TRELLIS.2-4B"
+    cfg_path = main / "pipeline.json"
+
+    try:
+        r = subprocess.run(["docker", "image", "inspect", config.TRELLIS_IMAGE,
+                            "--format", "{{.Size}}"],
+                           capture_output=True, text=True, timeout=20)
+        if r.returncode == 0:
+            out.append(f"  образ:      {config.TRELLIS_IMAGE}, "
+                       f"{_fmt_bytes(int(r.stdout.strip()))}")
+        else:
+            out.append(f"  образ:      НЕТ ({config.TRELLIS_IMAGE}). "
+                       "Собрать: docker build -t photo3d/trellis:1 docker/")
+    except Exception as exc:  # noqa: BLE001
+        out.append(f"  образ:      проверить не удалось ({type(exc).__name__})")
+
+    if cfg_path.exists():
+        try:
+            args = json.loads(cfg_path.read_text(encoding="utf-8"))["args"]
+            models = args["models"]
+            missing = [k for k, v in models.items()
+                       if not (main / f"{v}.safetensors").exists()]
+            # Считаем только то, что реально грузится. На диске могут лежать
+            # и веса других разрешений - они скачаны, но конфигу не нужны, и
+            # включать их в цифру значило бы врать о расходе.
+            used = sum((main / f"{v}.safetensors").stat().st_size
+                       for v in models.values()
+                       if (main / f"{v}.safetensors").exists())
+            spare = sum(f.stat().st_size for f in main.rglob("*.safetensors")) - used
+            out.append(f"  веса:       {len(models)} моделей, {_fmt_bytes(used)}"
+                       + (f" (+{_fmt_bytes(spare)} про запас)" if spare > 1e8 else "")
+                       + (f", НЕ ХВАТАЕТ: {missing}" if missing else ""))
+            out.append(f"  режим:      {args.get('default_pipeline_type')}, "
+                       f"low_vram={args.get('low_vram')}")
+            dino = Path(args["image_cond_model"]["args"]["model_name"])
+            # в конфиге путь контейнерный (/weights/...), на хосте он другой
+            host_dino = config.TRELLIS_WEIGHTS / dino.name
+            out.append(f"  кодировщик: {dino} "
+                       f"({'на месте' if host_dino.exists() else 'НЕ НАЙДЕН НА ХОСТЕ'})")
+        except Exception as exc:  # noqa: BLE001
+            out.append(f"  конфиг:     повреждён ({type(exc).__name__}: {exc})")
+    else:
+        out.append(f"  веса:       НЕТ конфига {cfg_path}. "
+                   "Прогнать: scripts/fetch_trellis.py")
+    return out
+
+
 @mcp.tool(annotations=READ_ONLY)
 def status() -> str:
     """Состояние сервера: движок, Blender, GPU, диск, число моделей.
@@ -584,8 +643,14 @@ def status() -> str:
         f"корень проекта:   {config.ROOT}",
         f"Blender:          {config.BLENDER} "
         f"({'найден' if config.BLENDER.exists() else 'НЕ НАЙДЕН'})",
+        f"стиль превью:     {config.PREVIEW_STYLE}",
         f"моделей в базе:   {len(store.ids())}",
     ]
+
+    if config.ENGINE == "trellis":
+        lines.append("")
+        lines.extend(_trellis_status())
+
     try:
         r = subprocess.run(
             ["nvidia-smi", "--query-gpu=name,memory.used,memory.total,utilization.gpu",

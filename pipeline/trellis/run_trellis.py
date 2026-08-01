@@ -208,13 +208,20 @@ def main() -> int:
     glb.export(a.dst, extension_webp=False)
     stages["экспорт_с"] = round(time.time() - t, 1)
 
+    # Ключи ниже - общий договор с остальной системой: их читают _summary в
+    # server/main.py и веб-интерфейс. Они те же, что отдаёт StubEngine, и
+    # менять их на русские нельзя: сводка молча покажет вопросительные знаки,
+    # потому что .get() на отсутствующем ключе не ошибка. Так и случилось при
+    # первом прогоне через MCP.
     report = {
-        "движок": "trellis2",
-        "режим": a.ptype,
+        "engine": "trellis2",
+        "mode": a.ptype,
         "seed": a.seed,
-        "вершин": int(len(glb.vertices)) if hasattr(glb, "vertices") else None,
-        "граней": int(len(glb.faces)) if hasattr(glb, "faces") else None,
-        "текстура": a.texture,
+        "vertices": int(len(glb.vertices)) if hasattr(glb, "vertices") else None,
+        "faces": int(len(glb.faces)) if hasattr(glb, "faces") else None,
+        "watertight": bool(getattr(glb, "is_watertight", False)),
+        # дальше - подробности сверх общего договора
+        "texture_size": a.texture,
         "время": stages,
         "всего_с": round(time.time() - t0, 1),
         "видеопамять": peak_gen,

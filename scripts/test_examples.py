@@ -74,7 +74,7 @@ def one(src: Path, mode: str) -> dict | None:
     report_path.write_text(json.dumps(rep, ensure_ascii=False, indent=2),
                            encoding="utf-8")
     print(f"  {src.stem}: {rep['по_часам_с']} с, "
-          f"граней {rep.get('граней')}, "
+          f"граней {rep.get('faces')}, "
           f"видеопамять {rep.get('видеопамять', {}).get('пик_выделено_ГБ')} ГБ")
     return rep
 
@@ -100,7 +100,7 @@ def row(src: Path, rep: dict) -> Image.Image:
     vram = rep.get("видеопамять", {}).get("пик_выделено_ГБ", "?")
     ImageDraw.Draw(strip).text(
         (6, TILE + 2),
-        f"{src.stem}   {rep.get('граней', '?')} граней   "
+        f"{src.stem}   {rep.get('faces', '?')} граней   "
         f"{rep.get('по_часам_с', '?')} с   видеопамять {vram} ГБ",
         fill=(205, 205, 205), font=font())
     return strip
