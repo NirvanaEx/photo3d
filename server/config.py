@@ -16,8 +16,10 @@ WEIGHTS_DIR = DATA / "weights"
 BLENDER = Path(os.environ.get("PHOTO3D_BLENDER", "/opt/blender/blender"))
 BLENDER_SCRIPTS = ROOT / "pipeline" / "blender"
 
-# Движок генерации: stub - заглушка без GPU, trellis - настоящий
-ENGINE = os.environ.get("PHOTO3D_ENGINE", "stub")
+# Движок генерации. По умолчанию настоящий; stub остаётся для отладки
+# обвязки без видеокарты и контейнера - он на порядок быстрее и не требует
+# ничего, кроме numpy.
+ENGINE = os.environ.get("PHOTO3D_ENGINE", "trellis")
 
 # --------------------------------------------------------------------------- #
 # TRELLIS.2

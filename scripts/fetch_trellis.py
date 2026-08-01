@@ -47,6 +47,34 @@ SS_DEC_NAME = "ss_dec_conv3d_16l8_fp16"
 DINO = "facebook/dinov3-vitl16-pretrain-lvd1689m"
 
 
+def token() -> str | None:
+    """Ключ доступа Hugging Face. Ищется в двух местах, и это не паранойя.
+
+    `hf auth login` кладёт ключ по пути, который зависит от HF_HOME. Мы HF_HOME
+    переопределяем на папку весов, а пользователь логинится в обычной оболочке,
+    где HF_HOME не задан - и ключ уезжает в ~/.cache/huggingface/token. Скрипт
+    искал бы его в своей папке и не нашёл, хотя вход выполнен.
+
+    Ключ читается программой и уходит прямо в запрос; на экран он не выводится
+    и в логи не попадает.
+    """
+    from huggingface_hub import constants
+
+    candidates = [
+        Path(constants.HF_TOKEN_PATH),
+        Path.home() / ".cache" / "huggingface" / "token",
+    ]
+    for p in candidates:
+        try:
+            value = p.read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+        if value:
+            print(f"    ключ найден: {p}", flush=True)
+            return value
+    return os.environ.get("HF_TOKEN") or None
+
+
 def human(n: int) -> str:
     return f"{n / 1e9:.2f} ГБ" if n >= 1e9 else f"{n / 1e6:.0f} МБ"
 
@@ -124,7 +152,7 @@ def main() -> int:
         # его по имени репозитория
         from huggingface_hub import snapshot_download
 
-        snapshot_download(repo_id=DINO, max_workers=4)
+        snapshot_download(repo_id=DINO, max_workers=4, token=token())
         print(f"  доступ есть, кэш: {human(dir_size(WEIGHTS / 'hf'))}", flush=True)
     except Exception as exc:  # noqa: BLE001
         print(f"  пока нет доступа: {type(exc).__name__}: {str(exc)[:200]}", flush=True)

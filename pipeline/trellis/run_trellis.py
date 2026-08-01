@@ -63,6 +63,51 @@ class _NoRembg:
         )
 
 
+def patch_dino_layers() -> str:
+    """Починить перебор слоёв DINOv3 под нынешний transformers.
+
+    TRELLIS.2 писался в ноябре 2025 и обходит слои как `self.model.layer`.
+    В transformers 5.x они переехали внутрь энкодера: `model.model.layer`,
+    и оригинальный код падает с
+    `'DINOv3ViTModel' object has no attribute 'layer'`.
+
+    Откатывать библиотеку не стали: расхождение ровно одно. Сигнатуры
+    embeddings(pixel_values, bool_masked_pos) и
+    layer(hidden_states, position_embeddings=...) в новой версии те же,
+    проверено по inspect.signature. Поэтому подменяется только поиск списка
+    слоёв, а сама логика извлечения признаков остаётся авторской.
+    """
+    import torch.nn.functional as F
+    from trellis2.modules import image_feature_extractor as ife
+
+    def layers_of(model):
+        found = getattr(model, "layer", None)          # старый вариант
+        if found is None:
+            inner = getattr(model, "model", None)      # transformers >= 5
+            found = getattr(inner, "layer", None) if inner is not None else None
+        if found is None:
+            raise RuntimeError(
+                "не найден список слоёв DINOv3: ни model.layer, ни "
+                "model.model.layer. Скорее всего, transformers снова "
+                "переставил внутренности - смотри modeling_dinov3_vit.py"
+            )
+        return found
+
+    def extract_features(self, image):  # noqa: ANN001
+        model = self.model
+        image = image.to(model.embeddings.patch_embeddings.weight.dtype)
+        hidden = model.embeddings(image, bool_masked_pos=None)
+        pos = model.rope_embeddings(image)
+        for layer in layers_of(model):
+            hidden = layer(hidden, position_embeddings=pos)
+        return F.layer_norm(hidden, hidden.shape[-1:])
+
+    ife.DinoV3FeatureExtractor.extract_features = extract_features
+    import transformers
+
+    return transformers.__version__
+
+
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
     p.add_argument("--in", dest="src", required=True)
@@ -112,6 +157,10 @@ def main() -> int:
     rembg_mod.BiRefNet = _NoRembg
 
     from trellis2.pipelines import Trellis2ImageTo3DPipeline
+
+    tver = patch_dino_layers()
+    print(f"transformers {tver}, перебор слоёв DINOv3 подправлен",
+          file=sys.stderr, flush=True)
 
     stages["импорт_с"] = round(time.time() - t0, 1)
 
