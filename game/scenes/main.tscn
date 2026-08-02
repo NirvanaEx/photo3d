@@ -1,0 +1,44 @@
+; Пустой мир: пол, свет, атмосфера. Ассеты добавляются сюда отдельными узлами.
+;
+; Сцена написана текстом и текстом же правится - это и есть способ работы с
+; Godot из агента. Свет и атмосфера здесь обычные свойства, а не код: поменять
+; туман или цвет неба - правка двух строк ниже.
+
+[gd_scene load_steps=4 format=3]
+
+[sub_resource type="Environment" id="Environment_main"]
+background_mode = 1
+background_color = Color(0.05, 0.06, 0.08, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.45, 0.5, 0.6, 1)
+ambient_light_energy = 0.6
+tonemap_mode = 3
+fog_enabled = true
+fog_light_color = Color(0.42, 0.47, 0.58, 1)
+fog_density = 0.012
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_floor"]
+size = Vector2(40, 40)
+
+[sub_resource type="StandardMaterial3D" id="Material_floor"]
+albedo_color = Color(0.22, 0.23, 0.25, 1)
+roughness = 0.9
+
+[node name="Main" type="Node3D"]
+
+[node name="World" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_main")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.86, -0.35, 0.37, 0, 0.72, 0.69, -0.51, -0.6, 0.62, 0, 6, 0)
+light_energy = 0.85
+light_color = Color(1, 0.96, 0.9, 1)
+shadow_enabled = true
+
+[node name="Floor" type="MeshInstance3D" parent="."]
+mesh = SubResource("PlaneMesh_floor")
+surface_material_override/0 = SubResource("Material_floor")
+
+[node name="Camera" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.65, 4)
+fov = 65.0

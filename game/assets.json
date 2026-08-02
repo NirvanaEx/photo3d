@@ -1,0 +1,62 @@
+{
+  "m_61aabe": {
+    "center": [
+      0.0,
+      0.005,
+      -0.008
+    ],
+    "elapsed_sec": 5.0,
+    "error": "",
+    "file": "assets/models/m_61aabe.glb",
+    "id": "m_61aabe",
+    "imported_at": 1785666809.7047398,
+    "maps": {
+      "albedo": 2,
+      "emission": 0,
+      "metallic": 2,
+      "normal": 0,
+      "roughness": 2
+    },
+    "materials": 2,
+    "mb": 47.1,
+    "meshes": 1,
+    "ok": true,
+    "size": [
+      0.692,
+      1.013,
+      0.47
+    ],
+    "surfaces": 2,
+    "triangles": 118929
+  },
+  "m_corridor": {
+    "center": [
+      0.0,
+      1.75,
+      -7.5
+    ],
+    "elapsed_sec": 10.7,
+    "error": "",
+    "file": "assets/models/m_corridor.glb",
+    "id": "m_corridor",
+    "imported_at": 1785666803.895022,
+    "maps": {
+      "albedo": 141,
+      "emission": 0,
+      "metallic": 109,
+      "normal": 0,
+      "roughness": 109
+    },
+    "materials": 10,
+    "mb": 11.3,
+    "meshes": 172,
+    "ok": true,
+    "size": [
+      3.8,
+      4.0,
+      15.7
+    ],
+    "surfaces": 172,
+    "triangles": 2756
+  }
+}
