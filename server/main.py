@@ -25,6 +25,7 @@ import anyio
 from mcp.server.mcpserver import Image, MCPServer
 from mcp.types import ToolAnnotations
 
+from bridge import shot_scene as shots
 from pipeline import bake
 from pipeline import paint as paint_mod
 from pipeline import smooth as smooth_mod
@@ -817,6 +818,51 @@ def _trellis_status() -> list[str]:
 
 
 @mcp.tool(annotations=READ_ONLY)
+async def shot_scene(
+    scene: str = "main",
+    views: int = 1,
+    azimuth: float | None = None,
+    elevation: float = 15,
+    res: int = 1024,
+    unshaded: bool = False,
+) -> list:
+    """Снять кадры из сцены Godot - глаза в собранном мире.
+
+    По тексту .tscn нельзя понять, стоит ли предмет на полу или висит в
+    воздухе, не съел ли туман дальнюю стену, не выгорела ли картинка от
+    пересвета. Инструмент запускает сцену, снимает её и возвращает кадры
+    сюда - 3-5 секунд на вызов, несколько ракурсов за один запуск движка.
+
+    Вместе с кадрами приходят замеры сцены и ОШИБКИ СКРИПТОВ из вывода
+    движка: красивый кадр не значит работающую сцену. Там же яркость каждого
+    источника света - первое, что объясняет белую картинку.
+
+    scene:     имя сцены: 'main', 'corridor', 'scenes/corridor.tscn' или
+               res://-путь. Пусто - главная сцена мира
+    views:     сколько ракурсов. 1 - один кадр; больше - равномерно по кругу.
+               Предмет облетается снаружи, локация осматривается ИЗНУТРИ,
+               с высоты глаз - так же, как в режиме прогулки
+    azimuth:   с какого угла смотреть, градусы. Пусто - взять камеру самой
+               сцены, ту, что поставил автор. Задан - завести свою
+    elevation: наклон камеры для предмета, градусы. Локация смотрит
+               горизонтально: под потолок и в пол там глядеть незачем
+    res:       ширина кадра, высота считается как 16:9
+    unshaded:  снять ДОПОЛНИТЕЛЬНЫЙ кадр без единой лампы, только альбедо.
+               Это способ отличить «текстура не доехала» от «сцена
+               пересвечена» - на обычном кадре они выглядят одинаково белыми
+
+    Сцены пишутся текстом: правь .tscn и снимай снова. Свет, туман и
+    тонмаппинг - обычные свойства WorldEnvironment, менять их правкой файла.
+    """
+    def _work():
+        return shots.shot_scene(scene, views=views, azimuth=azimuth,
+                                elevation=elevation, res=res, unshaded=unshaded)
+
+    r = await anyio.to_thread.run_sync(_work)
+    return [shots.describe(r), *[Image(path=str(s["path"])) for s in r["shots"]]]
+
+
+@mcp.tool(annotations=READ_ONLY)
 def status() -> str:
     """Состояние сервера: движок, Blender, GPU, диск, число моделей.
 
@@ -831,6 +877,8 @@ def status() -> str:
         f"({'найден' if config.BLENDER.exists() else 'НЕ НАЙДЕН'})",
         f"стиль превью:     {config.PREVIEW_STYLE}",
         f"моделей в базе:   {len(store.ids())}",
+        f"Godot:            {config.GODOT} "
+        f"({'найден' if config.GODOT.exists() else 'НЕ НАЙДЕН'})",
     ]
 
     if config.ENGINE == "trellis":

@@ -1,0 +1,50 @@
+; Первая сцена из настоящих ассетов: коридор, собранный процедурой в Blender,
+; и модель, сгенерированная из фотографии. Оба приехали мостом
+; (bridge/import_asset.py) и лежат в assets/models.
+;
+; Написана текстом целиком, редактор не открывался. Высота, на которой стоит
+; бюст, посчитана, а не подобрана на глаз: пол коридора на y=-0.25, половина
+; высоты модели 0.506, отсюда 0.256.
+
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="PackedScene" path="res://assets/models/m_corridor.glb" id="1_corridor"]
+[ext_resource type="PackedScene" path="res://assets/models/m_61aabe.glb" id="2_bust"]
+
+[sub_resource type="Environment" id="Environment_corridor"]
+background_mode = 1
+background_color = Color(0.03, 0.04, 0.05, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.5, 0.55, 0.62, 1)
+ambient_light_energy = 0.55
+tonemap_mode = 3
+fog_enabled = true
+fog_light_color = Color(0.4, 0.45, 0.55, 1)
+fog_density = 0.02
+
+[node name="Corridor" type="Node3D"]
+
+[node name="World" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_corridor")
+
+; Своего солнца здесь НЕТ намеренно: локация привозит собственное в GLB, и
+; второе давало пересвет - пол и стена выгорали в белое. Отчёт съёмки это и
+; показал числом «источников света 2» ещё до того, как стало понятно по кадру.
+
+[node name="Location" parent="." instance=ExtResource("1_corridor")]
+
+; Солнце приезжает внутри GLB с яркостью 28 686: Blender пишет силу источника
+; в люксах, а Godot читает это число как обычный множитель. Перебиваем его
+; здесь, а не правим экспорт: в GLB значение физически верное, и прогулке в
+; вебе оно не мешает - лишним оно оказывается только тут.
+[node name="sun" parent="Location" index="0"]
+light_energy = 1.6
+
+[node name="Bust" parent="." instance=ExtResource("2_bust")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.256, -4)
+
+[node name="Camera" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.4, 0)
+fov = 65.0
+
+[editable path="Location"]
