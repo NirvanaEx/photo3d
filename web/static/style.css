@@ -183,6 +183,33 @@ model-viewer:not([src]) { visibility: hidden; }
 }
 .tool:hover { background: var(--panel-2); border-color: var(--accent); }
 .tool.off { color: var(--muted); }
+.tool.on { color: var(--accent); border-color: var(--accent); }
+
+/* ---------- свободная камера ---------- */
+/* Курсор-перекрестие виден только когда захват мыши не удался и обзор идёт
+   перетаскиванием: при захвате курсора нет вовсе. */
+#viewer-wrap.fly { cursor: crosshair; }
+
+#fly-hud {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+  z-index: 4; display: flex; align-items: center; gap: 14px;
+  padding: 6px 13px; border-radius: 7px;
+  background: rgba(28,31,38,.9); border: 1px solid var(--line);
+  color: var(--muted); font-size: 12px; pointer-events: none;
+  max-width: 92%; flex-wrap: wrap; justify-content: center;
+}
+#fly-hud b { color: var(--text); font-family: var(--mono); font-weight: 600; }
+#fly-hud .fly-speed { color: var(--text); font-family: var(--mono); }
+#fly-hud .fly-warn { color: var(--warn); }
+
+#fly-cross {
+  position: absolute; left: 50%; top: 50%; z-index: 4;
+  width: 15px; height: 15px; margin: -8px 0 0 -8px;
+  pointer-events: none; opacity: .45;
+}
+#fly-cross::before, #fly-cross::after { content: ""; position: absolute; background: #e6e8ec; }
+#fly-cross::before { left: 50%; top: 0; width: 1px; height: 100%; }
+#fly-cross::after { top: 50%; left: 0; height: 1px; width: 100%; }
 
 /* ---------- panel ---------- */
 #panel { border-top: 1px solid var(--line); background: var(--panel); padding: 12px 16px 14px; }

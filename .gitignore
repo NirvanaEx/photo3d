@@ -9,6 +9,9 @@ data/output/*
 !data/output/.gitkeep
 data/cache/*
 !data/cache/.gitkeep
+# Корзина: удалённые модели ждут здесь возврата. Растёт так же, как output,
+# и по тем же причинам в репозитории ей делать нечего.
+data/trash/
 
 # Python
 __pycache__/

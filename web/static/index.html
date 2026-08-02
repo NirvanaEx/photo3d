@@ -3,29 +3,99 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>photo3d — просмотр моделей</title>
+<title>photo3d</title>
 <link rel="stylesheet" href="/static/style.css">
+<!-- Навигация, главная и корзина держатся в отдельной паре файлов, а не
+     дописаны в style.css и app.js. Причина не в чистоте, а в том, что над
+     вьюером работают параллельно: раздельные файлы правятся, не задевая
+     друг друга. -->
+<link rel="stylesheet" href="/static/nav.css">
+<link rel="stylesheet" href="/static/walk.css">
+
+<!-- Карта импортов. Нужна потому, что аддоны three (PointerLockControls,
+     GLTFLoader, Octree) написаны как ES-модули и импортируют голое имя
+     "three". Сборщика в проекте нет и заводить его не за чем: карта импортов
+     — штатный способ обойтись без него, браузеры её понимают сами.
+     Пути ведут в vendor/: интерфейс обязан открываться без интернета. -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "/static/vendor/three/three.module.min.js",
+    "three/addons/": "/static/vendor/three/addons/"
+  }
+}
+</script>
+
 <script type="module" src="/static/vendor/model-viewer.min.js"></script>
 </head>
 <body>
 
-<header>
+<!-- Панель навигации. Пункты рисуются из реестра в nav.js, а не лежат здесь
+     разметкой: добавить раздел должно быть одной записью в массиве, а не
+     правкой в трёх местах. -->
+<nav id="rail">
   <div class="brand">
     <span class="logo">◆</span>
     <span>photo3d</span>
   </div>
-  <div class="head-right">
-    <label class="toggle">
-      <input type="checkbox" id="follow" checked>
-      <span>следить за новыми</span>
-    </label>
+  <div id="nav"></div>
+  <div class="rail-foot">
+    <div class="rail-stat"><span>моделей</span><b id="stat-count">—</b></div>
+    <div class="rail-stat"><span>на диске</span><b id="stat-size">—</b></div>
     <div class="live" id="live" data-state="connecting">
       <span class="dot"></span><span class="live-text">подключение…</span>
     </div>
   </div>
+</nav>
+
+<div id="content">
+
+<header>
+  <div class="crumbs" id="crumbs"></div>
+  <div class="head-right">
+    <label class="toggle" id="follow-wrap">
+      <input type="checkbox" id="follow" checked>
+      <span>следить за новыми</span>
+    </label>
+  </div>
 </header>
 
 <main>
+
+  <!-- ----------------------------------------------------------- главная -->
+  <section class="view" id="view-home" hidden>
+    <div class="scroll">
+      <div class="tiles" id="tiles"></div>
+
+      <div class="toolbar">
+        <input type="search" id="q" autocomplete="off"
+               placeholder="поиск по имени, id или исходнику">
+        <div class="chips" id="engine-chips"></div>
+        <select id="sort" title="Порядок">
+          <option value="new">сначала свежие</option>
+          <option value="old">сначала старые</option>
+          <option value="big">сначала тяжёлые</option>
+          <option value="faces">больше полигонов</option>
+          <option value="name">по имени</option>
+        </select>
+      </div>
+
+      <!-- Полоса действий над выбранными. Появляется, только когда есть что
+           делать: панель кнопок, ни к чему не применимых, сбивает с толку. -->
+      <div class="bulk" id="bulk" hidden>
+        <span id="bulk-text"></span>
+        <span class="spacer"></span>
+        <button class="btn" id="bulk-none">снять выбор</button>
+        <button class="btn danger" id="bulk-del">удалить выбранные</button>
+      </div>
+
+      <div class="grid" id="gallery"></div>
+      <div class="empty" id="home-empty" hidden></div>
+    </div>
+  </section>
+
+  <!-- ---------------------------------------------------------- просмотр -->
+  <section class="view" id="view-viewer" hidden>
   <aside id="sidebar">
     <div class="aside-head">
       <span>Модели</span><span class="count" id="count">—</span>
@@ -42,6 +112,7 @@
       <div class="mode-tabs">
         <button class="mode active" data-mode="3d">3D</button>
         <button class="mode" data-mode="spin">Турнтейбл</button>
+        <button class="mode" data-mode="walk">Прогулка</button>
       </div>
 
       <!-- Подложка рисуется средствами CSS, а не геометрией: model-viewer
@@ -82,13 +153,50 @@
         <img id="spin-img" alt="" draggable="false">
       </div>
 
+      <!-- Прогулка: свой рендерер three.js со своей сценой. Разметка здесь,
+           вся логика в walk.js — model-viewer к этому режиму отношения не
+           имеет вовсе, ходьбы его орбитальная камера не умеет. -->
+      <div id="walk-stage" hidden>
+        <canvas id="walk-canvas"></canvas>
+        <div id="walk-cross"></div>
+        <div id="walk-lock">
+          <div>
+            <b>Кликни, чтобы взять управление</b>
+            <span>WASD — идти · мышь — смотреть · Space — прыжок
+              · Shift — бежать · Esc — отпустить мышь</span>
+          </div>
+        </div>
+        <div id="walk-stats">
+          <div><span>позиция</span><b id="walk-pos">—</b></div>
+          <div><span>скорость</span><b id="walk-speed">—</b></div>
+          <div><span>опора</span><b id="walk-floor">—</b></div>
+          <div><span>кадров/с</span><b id="walk-fps">—</b></div>
+          <div><span>модель</span><b id="walk-model">—</b></div>
+          <div><span>коллайдер</span><b id="walk-collider">—</b></div>
+          <div id="walk-note"></div>
+        </div>
+        <div id="walk-error" hidden></div>
+      </div>
+
       <div class="viewer-empty" id="viewer-empty">выбери модель слева</div>
       <div class="hint" id="hint" hidden></div>
+
+      <!-- Свободная камера: прицел и подсказка живут только в этом режиме.
+           Прицел нужен потому, что при захвате мыши курсора нет вообще, и
+           без метки в центре непонятно, куда полетишь по W. -->
+      <div id="fly-cross" hidden></div>
+      <div id="fly-hud" hidden>
+        <span><b>WASD</b> лететь · <b>мышь</b> смотреть · <b>Q/E</b> вниз-вверх
+          · <b>Shift</b> быстрее · <b>колесо</b> скорость · <b>Esc</b> выход</span>
+        <span class="fly-speed" id="fly-speed"></span>
+        <span class="fly-warn" id="fly-warn" hidden>дальше модель уйдёт за дальнюю плоскость</span>
+      </div>
 
       <div class="viewer-tools">
         <button id="btn-zoom-in" class="tool" title="Приблизить (колесо мыши)">+</button>
         <button id="btn-zoom-out" class="tool" title="Отдалить (колесо мыши)">−</button>
         <button id="btn-reset" class="tool" title="Сбросить вид (двойной клик)">⌖</button>
+        <button id="btn-fly" class="tool" title="Свободная камера: WASD и мышь (клавиша C)">✥</button>
         <button id="btn-rotate" class="tool" title="Автовращение">⟳</button>
         <button id="btn-scene" class="tool" title="Студийный фон и тень">◐</button>
         <button id="btn-full" class="tool" title="Во весь экран">⛶</button>
@@ -101,12 +209,54 @@
       <div id="strip" class="strip"></div>
     </div>
   </section>
+  </section>
+
+  <!-- ----------------------------------------------------------- корзина -->
+  <section class="view" id="view-trash" hidden>
+    <div class="scroll">
+      <div class="trash-head">
+        <div>
+          <div class="trash-title">Корзина</div>
+          <div class="trash-sub" id="trash-sub">—</div>
+        </div>
+        <button class="btn danger" id="purge-all">очистить корзину</button>
+      </div>
+      <div class="grid" id="trash-grid"></div>
+      <div class="empty" id="trash-empty" hidden>
+        Корзина пуста.<br>Удалённые модели попадают сюда и ждут, пока их
+        вернут или сотрут окончательно.
+      </div>
+    </div>
+  </section>
+
 </main>
+</div>
 
 <div id="lightbox" class="lightbox" hidden>
   <img id="lightbox-img" alt="">
 </div>
 
+<!-- Свой диалог, а не confirm(): системное окно не покажет ни размер, ни то,
+     что у модели есть производные, — а именно это и решает, удалять ли. -->
+<div id="modal" class="modal" hidden>
+  <div class="modal-box" role="dialog" aria-modal="true">
+    <div class="modal-title" id="modal-title"></div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-foot">
+      <button class="btn" id="modal-cancel">отмена</button>
+      <button class="btn primary" id="modal-ok">ок</button>
+    </div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+
 <script src="/static/app.js"></script>
+<!-- Загружается после app.js: оборачивает его applyModels, чтобы получать
+     то же состояние, не открывая второго соединения SSE. -->
+<script src="/static/nav.js"></script>
+<!-- Модуль: три и его аддоны — ES-модули, иначе карта импортов не применится.
+     Наружу отдаёт window.walk, через него его и зовёт app.js. -->
+<script type="module" src="/static/walk.js"></script>
 </body>
 </html>

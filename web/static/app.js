@@ -112,6 +112,16 @@ function select(id) {
   setSpinFrame(0);
 
   const viewer = $("viewer");
+  // Смена самой геометрии переставляет камеру вьюера, и точка, из которой
+  // летели, теряет смысл. Перерисовка того же файла (а select зовётся на
+  // каждое обновление списка) из режима не выкидывает.
+  const srcKey = `${m.id}@${m.updated}`;
+  if (fly.on && srcKey !== state.srcKey) flyExit();
+  state.srcKey = srcKey;
+
+  state.glbUrl = m.glb ? `/files/${m.id}/model.glb?v=${m.updated}` : null;
+  if (window.walk) window.walk.setModel(state.glbUrl);
+
   if (m.glb) {
     // v= сбрасывает кэш, когда модель перегенерировали под тем же id
     viewer.src = `/files/${m.id}/model.glb?v=${m.updated}`;
@@ -351,7 +361,16 @@ function drawGrid() {
 
   // Поле заметно больше расстояния до камеры: край сетки не должен попадать
   // в кадр — иначе пол читается как висящая в пустоте площадка, а не как пол.
-  const dist = cam.position.length ? cam.position.length() : span * 4;
+  // Позиция камеры в координатах модели. cam.position — смещение от цели
+  // (вьюер вращает камеру вокруг начала координат и двигает сцену), поэтому
+  // в мир она переводится тем же off, что и точки пола. В орбите разницы
+  // почти нет, а в свободной камере цель улетает вместе с камерой, и без
+  // этой поправки поле сетки считалось бы по радиусу орбиты — то есть пол
+  // обрывался бы прямо под ногами.
+  const camx = cam.position.x - off.x;
+  const camy = cam.position.y - off.y;
+  const camz = cam.position.z - off.z;
+  const dist = Math.hypot(camx - cx, camy - floorY, camz - cz) || span * 4;
   const half = Math.max(span * 4, dist * 7);
   // Клетку укрупняем, пока число линий не станет разумным. Так сетка
   // подстраивается под масштаб, как в 3D-редакторах, вместо того чтобы
@@ -428,8 +447,8 @@ function drawGrid() {
   // 1. По глубине. Вдали линии сходятся и сливаются в сплошную заливку,
   // поэтому дальний план надо гасить сильнее ближнего. Ориентир — экранная
   // высота точки на полу в отдалении: она и задаёт направление «вглубь».
-  const away = Math.hypot(cam.position.x, cam.position.z) > 1e-6
-    ? [-cam.position.x, -cam.position.z] : [0, -1];
+  const away = Math.hypot(cx - camx, cz - camz) > 1e-6
+    ? [cx - camx, cz - camz] : [0, -1];
   const alen = Math.hypot(away[0], away[1]) || 1;
   const farView = toView(cx + away[0] / alen * half * 0.5, floorY,
                          cz + away[1] / alen * half * 0.5);
@@ -468,13 +487,29 @@ function initGrid() {
 // ------------------------------------------------------------------- режимы
 
 function setMode(mode, auto = false) {
+  if (mode !== "3d") flyExit();     // турнтейбл — картинки, летать негде
   state.mode = mode;
   const is3d = mode === "3d";
+  const isWalk = mode === "walk";
   $("viewer").style.visibility = is3d ? "visible" : "hidden";
-  $("spin-stage").hidden = is3d;
+  $("spin-stage").hidden = mode !== "spin";
   document.querySelectorAll(".mode").forEach((b) =>
     b.classList.toggle("active", b.dataset.mode === mode));
   $("btn-rotate").style.display = is3d ? "" : "none";
+
+  // Прогулка живёт в walk.js: он модуль, app.js — обычный скрипт, поэтому
+  // общаются через window.walk. Модуль грузится позже разметки, так что
+  // проверка на его наличие обязательна, а не «на всякий случай».
+  if (window.walk) {
+    if (isWalk) window.walk.enter(state.glbUrl);
+    else window.walk.exit();
+  } else if (isWalk) {
+    $("walk-stage").hidden = false;
+    $("walk-error").hidden = false;
+    $("walk-error").textContent =
+      "модуль прогулки не загрузился. Прогони scripts/fetch-vendor.sh three — " +
+      "он кладёт three.js в web/static/vendor/three/.";
+  }
 
   const hint = $("hint");
   hint.hidden = false;
@@ -482,8 +517,10 @@ function setMode(mode, auto = false) {
   if (auto) {
     hint.textContent = "3D-вьюер не смог отрисовать сцену — включён турнтейбл " +
       "по готовым кадрам. Тяни мышью, колесо меняет масштаб.";
+  } else if (isWalk) {
+    hint.hidden = true;                        // в прогулке своя подсказка
   } else if (is3d) {
-    hint.textContent = "ЛКМ — вращать · колесо — масштаб · ПКМ — сдвинуть";
+    hint.textContent = "ЛКМ — вращать · колесо — масштаб · ПКМ — сдвинуть · C — свободная камера";
   } else {
     hint.textContent = "тяни влево-вправо — вращать · колесо — масштаб · Shift+тяни — сдвинуть";
   }
@@ -521,6 +558,9 @@ function scheduleFallbackCheck() {
 
 function zoom3d(factor) {
   const v = $("viewer");
+  // В свободной камере приближение — это шаг вперёд, а не изменение радиуса:
+  // радиус там держит отсечение и трогать его нельзя (см. flyEnter).
+  if (fly.on) { flyMove(factor < 1 ? fly.speed * 0.4 : -fly.speed * 0.4); return; }
   if (state.mode !== "3d") {
     spin.scale = clamp(spin.scale * (factor < 1 ? 1.25 : 1 / 1.25), 1, 8);
     if (spin.scale === 1) { spin.px = 0; spin.py = 0; }
@@ -537,6 +577,23 @@ $("btn-zoom-in").onclick = () => zoom3d(0.8);
 $("btn-zoom-out").onclick = () => zoom3d(1.25);
 
 $("btn-reset").onclick = () => {
+  if (fly.on) {
+    // «Я улетел и не вижу модель» — главный способ потеряться в свободной
+    // камере. Сброс не выкидывает из режима, а разворачивает на модель и
+    // подтягивает к ней, если улетели совсем далеко.
+    const c = fly.center;
+    let dx = fly.eye.x - c.x, dy = fly.eye.y - c.y, dz = fly.eye.z - c.z;
+    let dist = Math.hypot(dx, dy, dz) || fly.span;
+    if (dist > fly.span * 6) {
+      const k = (fly.span * 3) / dist;
+      fly.eye = { x: c.x + dx * k, y: c.y + dy * k, z: c.z + dz * k };
+      dx *= k; dy *= k; dz *= k; dist *= k;
+    }
+    fly.yaw = Math.atan2(-dx, -dz);
+    fly.pitch = Math.asin(clamp(-dy / dist, -1, 1));
+    flyApply();
+    return;
+  }
   if (state.mode === "3d") {
     const v = $("viewer");
     v.cameraOrbit = "0deg 75deg auto";
@@ -570,9 +627,329 @@ $("btn-full").onclick = () => {
   else el.requestFullscreen && el.requestFullscreen();
 };
 
+// ------------------------------------------------------------ свободная камера
+
+// model-viewer умеет только орбиту: камера всегда смотрит в цель и стоит от
+// неё на расстоянии radius. Свободного полёта в его API нет, но он собирается
+// из двух свойств сразу. Держим своё состояние — глаз и углы взгляда, — а во
+// вьюер отдаём цель = глаз + направление·radius и орбиту, развёрнутую на 180°.
+// Камера, которую вьюер вычислит из этой пары, встанет ровно в глаз, а поворот
+// головы перестанет таскать её по дуге вокруг модели, как делает орбита.
+//
+// radius при этом не трогается вовсе. Соблазн «подъезжать» его уменьшением
+// велик, но ближняя и дальняя плоскости пересчитываются только при смене
+// max-camera-orbit, и радиус, уехавший от того, под который их считали, даёт
+// отсечение не там. Едем целиком глазом, радиус — константа режима.
+const fly = {
+  on: false,
+  eye: { x: 0, y: 0, z: 0 },
+  yaw: 0, pitch: 0,
+  radius: 1,          // орбита режима, см. выше
+  span: 1,            // габарит модели: к нему привязаны скорость и пределы
+  half: 1,            // половина диагонали габаритного ящика
+  center: { x: 0, y: 0, z: 0 },
+  speed: 1,           // единиц модели в секунду
+  keys: new Set(),
+  raf: 0, last: 0,
+  dragging: false,
+  hadLock: false,
+  clamped: false,
+  saved: null,
+};
+
+// Клавиши читаются по e.code, а не по e.key: при русской раскладке key даёт
+// «ц», «ф», «ы», «в», и WASD молча перестаёт работать. code от раскладки
+// не зависит.
+const FLY_KEYS = new Set([
+  "KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE", "Space",
+  "ControlLeft", "ControlRight", "ShiftLeft", "ShiftRight",
+]);
+
+const FLY_BOOST = 3;          // ускорение по Shift
+const FLY_FOV = 65;           // градусов, «человеческий» обзор вместо кадрирующего
+const FLY_TURN = 600;         // пикселей мыши на поворот в высоту кадра
+
+// Чувствительность мыши считается от фактического поля зрения, а не задана
+// в радианах на пиксель. Кадрирующий объектив вьюера узкий (30° на типовой
+// модели), и при постоянной чувствительности один пиксель мыши сдвигал мир
+// на четыре экранных: поворот читался как рывки из стороны в сторону.
+// Привязка к обзору держит отклик в долях кадра, а не в градусах.
+function flySens() {
+  const fov = $("viewer").getFieldOfView() || FLY_FOV;
+  return (fov * Math.PI / 180) / FLY_TURN;
+}
+
+function flyDir() {
+  const cp = Math.cos(fly.pitch);
+  return {
+    x: Math.sin(fly.yaw) * cp,
+    y: Math.sin(fly.pitch),
+    z: Math.cos(fly.yaw) * cp,
+  };
+}
+
+// Дальше этого предела модель уходит за дальнюю плоскость и просто пропадает
+// с экрана. Пустой вьюер без объяснения читается как поломка, поэтому дальше
+// камеру не пускаем и говорим об этом в подсказке.
+function flyLimit() {
+  const sc = sceneOf($("viewer"));
+  const far = sc && sc.camera ? sc.camera.far : 0;
+  return far > 0 ? Math.max(far * 0.9 - fly.half, fly.span) : fly.span * 25;
+}
+
+function flyHud() {
+  // Скорость показывается в габаритах модели в секунду: абсолютные единицы
+  // GLB ничего не говорят — модели приходят и метровые, и сантиметровые.
+  $("fly-speed").textContent = `скорость ${(fly.speed / fly.span).toFixed(2)} мод/с`;
+}
+
+function flyApply() {
+  const v = $("viewer");
+  const d = flyDir(), r = fly.radius, e = fly.eye;
+  v.cameraTarget = `${e.x + d.x * r}m ${e.y + d.y * r}m ${e.z + d.z * r}m`;
+  v.cameraOrbit = `${fly.yaw + Math.PI}rad ${fly.pitch + Math.PI / 2}rad ${r}m`;
+}
+
+function flyLook(dx, dy) {
+  const s = flySens();
+  fly.yaw -= dx * s;
+  // Ровно на полюсе орбита вырождается: theta теряет смысл, картинка дёргается
+  const lim = Math.PI / 2 - 0.02;
+  fly.pitch = clamp(fly.pitch - dy * s, -lim, lim);
+  flyApply();
+}
+
+function flyMove(dist) {
+  const d = flyDir();
+  fly.eye.x += d.x * dist; fly.eye.y += d.y * dist; fly.eye.z += d.z * dist;
+  flyHold();
+  flyApply();
+}
+
+function flyHold() {
+  const lim = flyLimit(), c = fly.center;
+  const dx = fly.eye.x - c.x, dy = fly.eye.y - c.y, dz = fly.eye.z - c.z;
+  const dist = Math.hypot(dx, dy, dz);
+  const over = dist > lim;
+  if (over) {
+    const k = lim / dist;
+    fly.eye.x = c.x + dx * k; fly.eye.y = c.y + dy * k; fly.eye.z = c.z + dz * k;
+  }
+  if (over !== fly.clamped) { fly.clamped = over; $("fly-warn").hidden = !over; }
+}
+
+function flyTick(now) {
+  fly.raf = requestAnimationFrame(flyTick);
+  // Свёрнутая вкладка не получает кадров, и первый после разворачивания
+  // придёт с шагом в секунды: без потолка одно нажатие уносит за горизонт.
+  const dt = Math.min((now - fly.last) / 1000, 0.1);
+  fly.last = now;
+
+  const k = fly.keys;
+  const fwd = (k.has("KeyW") ? 1 : 0) - (k.has("KeyS") ? 1 : 0);
+  const side = (k.has("KeyD") ? 1 : 0) - (k.has("KeyA") ? 1 : 0);
+  const up = ((k.has("KeyE") || k.has("Space")) ? 1 : 0)
+           - ((k.has("KeyQ") || k.has("ControlLeft") || k.has("ControlRight")) ? 1 : 0);
+  if (!fwd && !side && !up) return;
+
+  const step = fly.speed * (k.has("ShiftLeft") || k.has("ShiftRight") ? FLY_BOOST : 1) * dt;
+  const d = flyDir();
+  // Вбок — строго по горизонтали. С честным векторным «вправо» шаг вбок при
+  // взгляде вверх уводил бы камеру вниз, хотя ехали ровно вбок.
+  const rx = -Math.cos(fly.yaw), rz = Math.sin(fly.yaw);
+
+  fly.eye.x += (d.x * fwd + rx * side) * step;
+  fly.eye.y += (d.y * fwd + up) * step;
+  fly.eye.z += (d.z * fwd + rz * side) * step;
+  flyHold();
+  flyApply();
+}
+
+function flyEnter() {
+  const v = $("viewer");
+  if (fly.on) return;
+  if (state.mode !== "3d" || !v.loaded) {
+    const hint = $("hint");
+    hint.hidden = false;
+    hint.classList.add("warn");
+    hint.textContent = "свободная камера работает в режиме 3D и только с загруженной моделью";
+    clearTimeout(state.hintTimer);
+    state.hintTimer = setTimeout(() => {
+      $("hint").hidden = true; $("hint").classList.remove("warn");
+    }, 3000);
+    return;
+  }
+
+  const o = v.getCameraOrbit();
+  const t = v.getCameraTarget();
+  fly.radius = Math.max(o.radius, 1e-4);
+  fly.eye = {
+    x: t.x + fly.radius * Math.sin(o.phi) * Math.sin(o.theta),
+    y: t.y + fly.radius * Math.cos(o.phi),
+    z: t.z + fly.radius * Math.sin(o.phi) * Math.cos(o.theta),
+  };
+  fly.yaw = o.theta - Math.PI;
+  fly.pitch = clamp(o.phi - Math.PI / 2, -Math.PI / 2 + 0.02, Math.PI / 2 - 0.02);
+
+  const dim = v.getDimensions();
+  const c = v.getBoundingBoxCenter();
+  fly.span = Math.max(dim.x, dim.y, dim.z) || 1;
+  fly.half = Math.hypot(dim.x, dim.y, dim.z) / 2 || fly.span;
+  fly.center = { x: c.x, y: c.y, z: c.z };
+  fly.speed = fly.span * 1.4;      // примерно полтора габарита в секунду
+
+  // Свойства, а не атрибуты: снятый атрибут у lit превращает число в null,
+  // и interpolation-decay после выхода остался бы сломанным навсегда.
+  // auto-rotate — исключение: его состояние читает кнопка ⟳ по атрибуту.
+  fly.saved = {
+    orbit: `${o.theta}rad ${o.phi}rad ${o.radius}m`,
+    target: `${t.x}m ${t.y}m ${t.z}m`,
+    min: v.minCameraOrbit, max: v.maxCameraOrbit,
+    controls: v.cameraControls, decay: v.interpolationDecay,
+    prompt: v.interactionPrompt, rotate: v.hasAttribute("auto-rotate"),
+    fov: v.fieldOfView, maxFov: v.maxFieldOfView,
+  };
+
+  v.cameraControls = false;              // мышь и колесо ведём сами
+  v.removeAttribute("auto-rotate");
+  v.interactionPrompt = "none";          // подсказка вьюера сама крутит камеру
+  // Штатный наклон ограничен «не под пол» — от первого лица это значило бы
+  // «вверх смотреть нельзя».
+  //
+  // Третье число — радиус, и оно тут не про орбиту: из него вьюер считает
+  // дальнюю плоскость (far = 2·радиус) и ближнюю (near = far/1000). При auto
+  // радиус равен дистанции кадрирования, и модель пропадала бы уже в четырёх
+  // своих габаритах от камеры. Десять габаритов дают запас на облёт, а ближняя
+  // плоскость при этом остаётся в паре сантиметров на метровой модели —
+  // подойти вплотную к лицу по-прежнему можно.
+  v.minCameraOrbit = "auto 0.5deg auto";
+  v.maxCameraOrbit = `auto 179.5deg ${(fly.span * 10).toFixed(4)}m`;
+  // Сглаживание камеры в 50 мс на непрерывном управлении читается как
+  // залипание мыши. Почти ноль: демпфер при таком времени отдаёт цель точно.
+  v.interpolationDecay = 0.001;
+  // Штатный обзор — кадрирующий: вьюер подбирает его так, чтобы модель
+  // заполнила кадр, и выходит телеобъектив (30° на типовой модели). Внутри
+  // сцены он читается как «мир прыгает при повороте» и «иду по колено в
+  // воде», потому что узкий угол сжимает перспективу и убивает ощущение хода.
+  // Потолок поднимается отдельно и РАНЬШЕ самого обзора: setFieldOfView
+  // режет значение по max, а порядок применения свойств внутри одного цикла
+  // обновления нам не подконтролен. Отсюда установка через updateComplete.
+  v.maxFieldOfView = `${FLY_FOV + 25}deg`;
+  v.updateComplete.then(() => { if (fly.on) v.fieldOfView = `${FLY_FOV}deg`; });
+
+  fly.on = true;
+  fly.hadLock = false;
+  fly.clamped = false;
+  fly.keys.clear();
+  $("viewer-wrap").classList.add("fly");
+  $("btn-fly").classList.add("on");
+  $("btn-rotate").style.display = "none";
+  $("hint").hidden = true;
+  $("fly-hud").hidden = false;
+  $("fly-cross").hidden = false;
+  $("fly-warn").hidden = true;
+  flyHud();
+  flyApply();
+
+  fly.last = performance.now();
+  fly.raf = requestAnimationFrame(flyTick);
+  flyLock();
+}
+
+function flyLock() {
+  const wrap = $("viewer-wrap");
+  try {
+    const p = wrap.requestPointerLock();
+    // Захват может не дать ни браузер, ни пользователь. Это не ошибка:
+    // обзор тогда работает перетаскиванием, курсор остаётся видимым.
+    if (p && p.catch) p.catch(() => {});
+  } catch { /* см. выше */ }
+}
+
+function flyExit() {
+  if (!fly.on) return;
+  fly.on = false;
+  cancelAnimationFrame(fly.raf);
+  fly.raf = 0;
+  fly.keys.clear();
+  fly.dragging = false;
+
+  const v = $("viewer"), s = fly.saved || {};
+  v.minCameraOrbit = s.min; v.maxCameraOrbit = s.max;
+  v.maxFieldOfView = s.maxFov; v.fieldOfView = s.fov;
+  v.interpolationDecay = s.decay;
+  v.interactionPrompt = s.prompt;
+  v.cameraControls = s.controls;
+  if (s.rotate) v.setAttribute("auto-rotate", "");
+  // Возврат ровно туда, откуда взлетели. Свободная камера — временный режим,
+  // и «где я вообще» после выхода хуже, чем потеря налётанного ракурса.
+  if (s.orbit) { v.cameraTarget = s.target; v.cameraOrbit = s.orbit; }
+
+  if (document.pointerLockElement) document.exitPointerLock();
+  $("viewer-wrap").classList.remove("fly");
+  $("btn-fly").classList.remove("on");
+  $("btn-rotate").style.display = state.mode === "3d" ? "" : "none";
+  $("fly-hud").hidden = true;
+  $("fly-cross").hidden = true;
+  scheduleGrid();
+}
+
+function initFly() {
+  const wrap = $("viewer-wrap");
+
+  $("btn-fly").onclick = () => (fly.on ? flyExit() : flyEnter());
+
+  document.addEventListener("pointerlockchange", () => {
+    if (document.pointerLockElement === wrap) { fly.hadLock = true; return; }
+    fly.keys.clear();
+    // Esc браузер съедает сам: keydown до нас не доходит, приходит только
+    // потеря захвата. Поэтому выход из режима висит именно здесь.
+    if (fly.on && fly.hadLock) flyExit();
+  });
+
+  wrap.addEventListener("pointerdown", (e) => {
+    if (!fly.on || e.button !== 0) return;
+    if (document.pointerLockElement === wrap) return;
+    fly.dragging = true;                 // запасной обзор, когда захвата нет
+    flyLock();
+  });
+  window.addEventListener("pointerup", () => { fly.dragging = false; });
+
+  document.addEventListener("pointermove", (e) => {
+    if (!fly.on) return;
+    if (document.pointerLockElement !== wrap && !fly.dragging) return;
+    flyLook(e.movementX || 0, e.movementY || 0);
+  });
+
+  // Колесо меняет скорость, а не масштаб: приближаться в свободной камере
+  // надо движением, а вот «медленно у лица, быстро в облёте» нужно всегда.
+  wrap.addEventListener("wheel", (e) => {
+    if (!fly.on) return;
+    e.preventDefault();
+    fly.speed = clamp(fly.speed * (e.deltaY < 0 ? 1.2 : 1 / 1.2),
+                      fly.span * 0.02, fly.span * 20);
+    flyHud();
+  }, { passive: false });
+
+  document.addEventListener("keyup", (e) => {
+    if (fly.on) fly.keys.delete(e.code);
+  });
+  // Потеря фокуса не шлёт keyup: без этого клавиша остаётся «нажатой»
+  // и камера уезжает сама по себе после переключения окна.
+  window.addEventListener("blur", () => fly.keys.clear());
+}
+
+function flyKeyDown(e) {
+  if (e.code === "Escape" || e.code === "KeyC") { flyExit(); return; }
+  if (!FLY_KEYS.has(e.code)) return;
+  e.preventDefault();          // пробел иначе прокручивает страницу
+  fly.keys.add(e.code);
+}
+
 // Подсказка про управление гаснет через несколько секунд, но возвращается
 // при наведении: иначе про правую кнопку и колесо никто не узнает.
 $("viewer-wrap").addEventListener("mouseenter", () => {
+  if (fly.on) return;                                 // там своя подсказка
   if ($("hint").classList.contains("warn")) return;   // предупреждение не трогаем
   $("hint").hidden = false;
   clearTimeout(state.hintTimer);
@@ -622,6 +999,10 @@ function connect() {
     const data = JSON.parse(e.data);
     if (!state.first) flash();
     applyModels(data.models);
+    // Навигации нужно то же состояние целиком (в нём ещё и корзина).
+    // Отдаём событием, чтобы она не открывала второе соединение SSE:
+    // каждое стоит серверу отдельного обхода папок по drvfs.
+    window.dispatchEvent(new CustomEvent("photo3d:state", { detail: data }));
   });
   es.addEventListener("error", () => {
     setLive("down", "соединение потеряно");
@@ -647,6 +1028,11 @@ $("viewer").addEventListener("error", () => {
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") $("lightbox").hidden = true;
   if (e.target.tagName === "INPUT") return;
+
+  // В свободной камере клавиатура целиком её: WASD не должны попасть
+  // в листание моделей стрелками и прочие общие сочетания.
+  if (fly.on) { flyKeyDown(e); return; }
+  if (e.code === "KeyC") { flyEnter(); return; }
 
   if (state.mode === "spin" && spin.frames.length) {
     if (e.key === "ArrowLeft") { setSpinFrame(spin.i + 1); return; }
@@ -680,11 +1066,15 @@ window.addEventListener("load", () => {
 
 initSpin();
 initGrid();
+initFly();
 setMode("3d");
 
 fetch("/api/models")
   .then((r) => r.json())
-  .then((d) => applyModels(d.models))
+  .then((d) => {
+    applyModels(d.models);
+    window.dispatchEvent(new CustomEvent("photo3d:state", { detail: d }));
+  })
   .catch(() => setLive("down", "сервер не отвечает"));
 
 connect();

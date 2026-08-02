@@ -4,6 +4,11 @@
         --glb model.glb --out views/ --views 24 --res 512 \
         --style clay --engine workbench
 
+Тот же скрипт снимает и одиночный кадр с заданного ракурса — с --azimuth.
+Сцена, свет и настройки движков у оборота и у одиночного кадра обязаны быть
+одни и те же: иначе крупный план показывал бы не то, что видно на превью,
+и сравнивать их было бы нельзя.
+
 Три стиля, у каждого своя задача:
 
   clay   - Workbench, серая глина с подчёркиванием впадин, без единой лампы.
@@ -37,6 +42,12 @@ def parse_args():
     p.add_argument("--style", default="clay", choices=["clay", "color", "beauty"])
     p.add_argument("--engine", default="workbench",
                    choices=["workbench", "eevee", "cycles"])
+    # Одиночный кадр. --azimuth задан - снимается он один, оборот не идёт.
+    p.add_argument("--azimuth", type=float, default=None)
+    p.add_argument("--elevation", type=float, default=None)
+    p.add_argument("--zoom", type=float, default=1.0)
+    p.add_argument("--focus", type=float, default=None)
+    p.add_argument("--name", default="look")
     return p.parse_args(argv)
 
 
@@ -51,7 +62,27 @@ def world_bounds(objs):
     hi = Vector((max(p[i] for p in pts) for i in range(3)))
     center = (lo + hi) / 2.0
     radius = max((p - center).length for p in pts)
-    return center, max(radius, 1e-4), lo
+    return center, max(radius, 1e-4), lo, hi
+
+
+# Ракурс турнтейбла: чуть справа, спереди и сверху. Наклон отсюда - около 20°,
+# и именно его повторяет elevation по умолчанию, чтобы одиночный кадр без
+# параметров совпадал с кадром оборота.
+BASE_DIR = Vector((0.55, -1.0, 0.42))
+
+
+def camera_direction(elevation_deg):
+    """Единичный вектор от точки прицела к камере.
+
+    Азимут не трогаем: он задаётся поворотом самой модели, как и в обороте.
+    Иначе пришлось бы держать два независимых способа считать ракурс, и
+    кадр 090 оборота перестал бы совпадать с azimuth=90 крупного плана.
+    """
+    if elevation_deg is None:
+        return BASE_DIR.normalized()
+    flat = Vector((BASE_DIR.x, BASE_DIR.y, 0.0)).normalized()
+    e = math.radians(max(min(elevation_deg, 85.0), -85.0))
+    return (flat * math.cos(e) + Vector((0.0, 0.0, 1.0)) * math.sin(e)).normalized()
 
 
 def setup_workbench(scene, style):
@@ -187,7 +218,7 @@ def main():
 
     scene = bpy.context.scene
     meshes = [o for o in scene.objects if o.type == "MESH"]
-    center, radius, lo = world_bounds(meshes)
+    center, radius, lo, hi = world_bounds(meshes)
 
     # Крутим объект вокруг пивота, а не камеру: свет остаётся на месте,
     # и кадры отличаются только ракурсом.
@@ -203,13 +234,26 @@ def main():
     scene.collection.objects.link(cam)
     scene.camera = cam
 
+    # Точка прицела. По умолчанию центр габарита; focus поднимает её по
+    # высоте модели (0 - низ, 1 - верх), чтобы снять голову, а не пупок.
+    target = center.copy()
+    if args.focus is not None:
+        target.z = lo.z + (hi.z - lo.z) * max(min(args.focus, 1.0), 0.0)
+
     half_fov = cam_data.angle / 2.0
+    # Расстояние считается по ПОЛНОМУ габариту и от zoom не зависит: приближает
+    # не подъезд камеры, а сужение объектива. Подъезд к голове фигуры требует
+    # зайти внутрь описанной сферы - оттуда лезет и отсечение ближней
+    # плоскостью, и перспективная карикатура вместо портрета. Длинный фокус с
+    # прежнего места даёт ровно то, что нужно: тот же ракурс, только крупнее.
     dist = radius / math.sin(half_fov) * 1.15  # запас, чтобы не подрезать край
-    direction = Vector((0.55, -1.0, 0.42)).normalized()
-    cam.location = center + direction * dist
-    cam.rotation_euler = (center - cam.location).to_track_quat("-Z", "Y").to_euler()
+    direction = camera_direction(args.elevation)
+    cam.location = target + direction * dist
+    cam.rotation_euler = (target - cam.location).to_track_quat("-Z", "Y").to_euler()
     cam_data.clip_start = max(dist - radius * 3, 0.001)
     cam_data.clip_end = dist + radius * 20
+    if args.zoom and abs(args.zoom - 1.0) > 1e-6:
+        cam_data.angle = 2.0 * math.atan(math.tan(half_fov) / max(args.zoom, 0.05))
 
     if args.style == "beauty":
         build_studio(scene, center, radius, lo.z)
@@ -236,13 +280,20 @@ def main():
     scene.render.image_settings.file_format = "PNG"
     scene.render.image_settings.color_mode = "RGB"
 
-    for i in range(args.views):
-        angle = 2 * math.pi * i / args.views
-        pivot.rotation_euler = (0, 0, angle)
-        deg = round(math.degrees(angle))
-        scene.render.filepath = f"{args.out.rstrip('/')}/{deg:03d}"
+    out = args.out.rstrip("/")
+    if args.azimuth is None:
+        for i in range(args.views):
+            angle = 2 * math.pi * i / args.views
+            pivot.rotation_euler = (0, 0, angle)
+            deg = round(math.degrees(angle))
+            scene.render.filepath = f"{out}/{deg:03d}"
+            bpy.ops.render.render(write_still=True)
+            print(f"BLENDER_VIEW_OK {deg:03d}")
+    else:
+        pivot.rotation_euler = (0, 0, math.radians(args.azimuth))
+        scene.render.filepath = f"{out}/{args.name}"
         bpy.ops.render.render(write_still=True)
-        print(f"BLENDER_VIEW_OK {deg:03d}")
+        print(f"BLENDER_VIEW_OK {args.name}")
 
     print("BLENDER_DONE")
 
