@@ -70,6 +70,72 @@ def join(objs, name):
     return obj
 
 
+def base_image(obj):
+    """Картинка базового цвета материала, если она есть."""
+    for mat in obj.data.materials:
+        if not mat or not mat.use_nodes:
+            continue
+        for node in mat.node_tree.nodes:
+            if node.type == "TEX_IMAGE" and node.image:
+                return node.image
+    return None
+
+
+def seam_color(obj, axis, level, band):
+    """Средний цвет поверхности в полосе вокруг плоскости стыка.
+
+    Именно вокруг стыка, а не по всей модели: у бюста и у тела разный состав
+    (волосы, руки, лицо), и средние по ним отличались бы не из-за освещения,
+    а из-за содержимого. Сравнивать надо одно и то же место - здесь это
+    воротник и плечи.
+    """
+    import numpy as np
+
+    img = base_image(obj)
+    mesh = obj.data
+    if img is None or not mesh.uv_layers.active:
+        return None, None
+
+    w, h = img.size
+    buf = np.empty(w * h * 4, dtype=np.float32)
+    img.pixels.foreach_get(buf)
+    pix = buf.reshape(h, w, 4)
+
+    uv = mesh.uv_layers.active.data
+    picked = []
+    for poly in mesh.polygons:
+        if abs(poly.center[axis] - level) > band:
+            continue
+        for li in poly.loop_indices:
+            u, v = uv[li].uv
+            x = min(max(int(u * (w - 1)), 0), w - 1)
+            y = min(max(int(v * (h - 1)), 0), h - 1)
+            picked.append(pix[y, x, :3])
+
+    if len(picked) < 50:
+        return None, img
+    arr = np.asarray(picked)
+    # тёмные и почти чёрные точки выбрасываем: это незаполненный фон между
+    # лоскутами развёртки, а не цвет поверхности
+    keep = arr.max(axis=1) > 0.04
+    if keep.sum() < 50:
+        return None, img
+    return arr[keep].mean(axis=0), img
+
+
+def apply_tint(img, factor):
+    """Умножить картинку на поканальный коэффициент."""
+    import numpy as np
+
+    w, h = img.size
+    buf = np.empty(w * h * 4, dtype=np.float32)
+    img.pixels.foreach_get(buf)
+    a = buf.reshape(-1, 4)
+    a[:, :3] = np.clip(a[:, :3] * factor, 0.0, 1.0)
+    img.pixels.foreach_set(a.reshape(-1))
+    img.update()
+
+
 def cut_plane(obj, axis, level, keep):
     """Отрезать половину меша по плоскости. keep - 'below' или 'above'.
 
@@ -144,6 +210,23 @@ def main():
     # головы внахлёст. Знак важен: cut_plane(keep="below") убирает всё над
     # уровнем, поэтому уровень НИЖЕ плоскости оставил бы щель.
     span = body.dimensions[cut_axis]
+
+    # Сведение тонов ДО резки: полоса вокруг стыка должна быть на обеих
+    # моделях целой, иначе замерять будет нечего.
+    tint = None
+    band = span * 0.05
+    c_body, _ = seam_color(body, cut_axis, cut_level, band)
+    c_head, img_head = seam_color(head, cut_axis, cut_level, band)
+    if c_body is not None and c_head is not None and img_head is not None:
+        import numpy as np
+
+        factor = np.clip(c_body / np.maximum(c_head, 1e-4), 0.5, 2.0)
+        # правим только если расхождение заметное: лишняя правка ради
+        # процента разницы только добавит риска
+        if float(np.abs(factor - 1.0).max()) > 0.06:
+            apply_tint(img_head, factor)
+            tint = [round(float(x), 3) for x in factor]
+
     body_before, body_after = cut_plane(
         body, cut_axis, cut_level + span * a.overlap, keep="below")
     head_before, head_after = cut_plane(
@@ -161,6 +244,7 @@ def main():
         "голова": f"{head_before} -> {head_after} граней (верх)",
         "граней_итого": len(merged.data.polygons),
         "материалов": len(merged.data.materials),
+        "сведение_тонов": tint or "не потребовалось",
     }
     print("GRAFT_STATS " + json.dumps(stats, ensure_ascii=False))
     print("GRAFT_DONE")
