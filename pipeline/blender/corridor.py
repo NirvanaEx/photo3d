@@ -59,6 +59,10 @@ def parse_args():
     p.add_argument("--res", default="1366x768")
     p.add_argument("--samples", type=int, default=128)
     p.add_argument("--width", type=float, default=3.10)
+    # Ширина сама по себе ощущения простора не даёт: коридор читается
+    # широким или узким по ОТНОШЕНИЮ ширины к высоте. Поэтому потолок
+    # тоже параметр, а не константа.
+    p.add_argument("--height", type=float, default=3.5)
     # Умолчания подобраны прогонами, а не взяты из головы, и связаны между
     # собой: высота солнца решает, сколько окна кладут на ПОЛ, а сколько на
     # левую стену. На 20° почти всё уходило на шкафчики, на 34° по полу идёт
@@ -662,9 +666,10 @@ def setup_cycles(scene, samples):
 
 
 def main():
-    global WIDTH
+    global WIDTH, HEIGHT
     args = parse_args()
     WIDTH = args.width
+    HEIGHT = args.height
     bpy.ops.wm.read_factory_settings(use_empty=True)
     scene = bpy.context.scene
 

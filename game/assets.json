@@ -105,17 +105,17 @@
     "bodies": 1,
     "center": [
       0.0,
-      1.75,
+      1.65,
       -7.5
     ],
-    "elapsed_sec": 4.5,
+    "elapsed_sec": 13.3,
     "error": "",
     "file": "assets/models/m_corridor_game.glb",
     "from": "m_corridor",
     "gameready": {
       "cameras_dropped": 0,
       "collider_mode": "colonly",
-      "collider_tris": 2000,
+      "collider_tris": 2500,
       "lights_dropped": [
         {
           "color": [
@@ -134,11 +134,11 @@
         }
       ],
       "meshes": 172,
-      "tris_after": 2756,
-      "tris_before": 2756
+      "tris_after": 2752,
+      "tris_before": 2752
     },
     "id": "m_corridor_game",
-    "imported_at": 1785669263.8905187,
+    "imported_at": 1785671580.1328928,
     "maps": {
       "albedo": 141,
       "emission": 0,
@@ -147,16 +147,16 @@
       "roughness": 109
     },
     "materials": 10,
-    "mb": 11.4,
+    "mb": 12.1,
     "meshes": 172,
     "ok": true,
     "shapes": 1,
     "size": [
+      5.2,
       3.8,
-      4.0,
       15.7
     ],
     "surfaces": 172,
-    "triangles": 2756
+    "triangles": 2752
   }
 }

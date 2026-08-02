@@ -7,7 +7,7 @@
 ; месту: подбирать высоту руками пришлось бы заново после каждой правки
 ; локации.
 
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="PackedScene" path="res://assets/models/m_corridor_game.glb" id="1_location"]
 [ext_resource type="PackedScene" path="res://assets/models/m_61aabe_game.glb" id="2_bust"]
@@ -21,8 +21,8 @@ background_color = Color(0.02, 0.025, 0.035, 1)
 ; референса. Рассеянного света мало нарочно: подними его, и солнечные пятна
 ; перестанут читаться, всё сравняется в ровные сумерки.
 ambient_light_source = 2
-ambient_light_color = Color(0.47, 0.53, 0.66, 1)
-ambient_light_energy = 0.72
+ambient_light_color = Color(0.56, 0.59, 0.65, 1)
+ambient_light_energy = 0.85
 tonemap_mode = 3
 tonemap_white = 3.0
 ; Свечение по ярким местам: солнечное пятно на полу должно немного разливаться
@@ -46,6 +46,31 @@ volumetric_fog_length = 40.0
 adjustment_enabled = true
 adjustment_contrast = 1.08
 adjustment_saturation = 1.06
+
+[sub_resource type="ParticleProcessMaterial" id="Dust_proc"]
+emission_shape = 3
+emission_box_extents = Vector3(2.4, 1.5, 7.2)
+direction = Vector3(0, -1, 0)
+spread = 30.0
+initial_velocity_min = 0.01
+initial_velocity_max = 0.05
+gravity = Vector3(0, -0.015, 0)
+scale_min = 0.5
+scale_max = 1.6
+turbulence_enabled = true
+turbulence_noise_strength = 0.12
+turbulence_noise_scale = 1.6
+
+[sub_resource type="StandardMaterial3D" id="Dust_mat"]
+transparency = 1
+albedo_color = Color(1, 0.96, 0.9, 0.55)
+roughness = 1.0
+billboard_mode = 3
+billboard_keep_scale = true
+
+[sub_resource type="QuadMesh" id="Dust_mesh"]
+material = SubResource("Dust_mat")
+size = Vector2(0.005, 0.005)
 
 [sub_resource type="CapsuleShape3D" id="Capsule_player"]
 radius = 0.32
@@ -78,6 +103,21 @@ shadow_enabled = true
 
 ; Скрипт снимает тень со стекла: иначе окна работают как заложенные
 ; проёмы, и внутри темно при направленном в них солнце.
+
+; Поддельный отскок. Настоящего GI нет (SDFGI в замкнутом помещении съедает
+; рассеянный свет), а на референсе шкафчики подсвечены именно светом,
+; отражённым от залитого солнцем пола. Источник без теней, слабый, тёплый,
+; направлен снизу-от окон в сторону шкафчиков.
+;
+; Матрица записана СТРОКАМИ - в .tscn базис идёт по строкам, и запись по осям
+; даёт транспонирование, то есть свет ровно в обратную сторону
+; (docs/PITFALLS.md).
+[node name="Bounce" type="DirectionalLight3D" parent="."]
+transform = Transform3D(-0.142, 0.608, 0.781, 0, 0.789, -0.614, -0.99, -0.087, -0.112, 0, 2, 0)
+light_energy = 0.55
+light_color = Color(1, 0.84, 0.66, 1)
+shadow_enabled = false
+
 [node name="Location" parent="." instance=ExtResource("1_location")]
 script = ExtResource("4_location_fix")
 
@@ -87,6 +127,21 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.256, -4)
 ; Точка появления - ВНУТРИ коридора. Он тянется по z от -15.35 до 0.35, и
 ; первая попытка ставила игрока в z=5, то есть за торцом, в пустоте: он падал
 ; двести метров вниз. Поймано пошаговым прогоном физики, а не глазами.
+
+; Пыль в воздухе. Материал ОСВЕЩАЕМЫЙ, а не самосветящийся: тогда пылинка
+; вспыхивает в солнечном луче и пропадает в тени - ровно так это читается на
+; референсе. Самосветящаяся давала бы ровный снег по всему коридору.
+;
+; preprocess: без него первые секунды воздух пустой, пыль «набегает» на глазах.
+[node name="Dust" type="GPUParticles3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, -7.5)
+amount = 600
+lifetime = 16.0
+preprocess = 12.0
+visibility_aabb = AABB(-3, -2, -9, 6, 4, 18)
+process_material = SubResource("Dust_proc")
+draw_pass_1 = SubResource("Dust_mesh")
+
 [node name="Player" type="CharacterBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, -1.5)
 script = ExtResource("3_player")

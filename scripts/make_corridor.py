@@ -33,7 +33,7 @@ OUT_DIR = config.OUTPUT_DIR / "loc_corridor"
 # Проброс насквозь в блендер-скрипт: список ровно тот, что имеет смысл крутить
 # снаружи. Всё остальное - константы сцены, их место в коде.
 PASS_THROUGH = ("sun_elev", "sun_azim", "sun_energy", "sky", "haze",
-                "lens", "cam", "look", "width", "exposure", "view_transform",
+                "lens", "cam", "look", "width", "height", "exposure", "view_transform",
                 "walk_span", "walk_z")
 
 
