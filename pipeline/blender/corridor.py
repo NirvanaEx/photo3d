@@ -34,11 +34,13 @@ LENGTH = 15.0         # от ближней стены (y=0) до дальней
 HEIGHT = 3.5          # до потолка; старое здание, потолки высокие
 WALL_T = 0.35         # толщина стен: даёт глубокие оконные откосы, как на референсе
 
-# Окна правой стены
-WIN_Y = (2.0, 4.6, 7.2, 9.8)   # центры проёмов вдоль коридора
-WIN_W = 1.10                   # ширина проёма
-WIN_SILL = 0.95                # низ проёма
-WIN_SPRING = 2.25              # пята арки: выше неё проём полукруглый
+# Окна правой стены. Числа сняты с референса по двери в торце: у неё
+# стандартные 2.05 м, и всё остальное меряется в её высотах. Окно там выходит
+# заметно выше и шире нашего прежнего, а простенки - уже.
+WIN_Y = (1.9, 4.3, 6.7, 9.1, 11.5)   # пять проёмов с шагом 2.4 вместо четырёх
+WIN_W = 1.20                   # ширина проёма
+WIN_SILL = 0.85                # низ проёма: на референсе подоконник ниже пояса
+WIN_SPRING = 2.35              # пята арки: выше неё проём полукруглый
 WIN_R = WIN_W / 2              # радиус арки
 
 # Левая стена
@@ -239,8 +241,8 @@ def mat_floor():
     brick.inputs["Bias"].default_value = 0.0
     # Разброс между досками намеренно заметный: на первом прогоне пол вышел
     # ровным коричневым полем, и раскладка читалась только по швам.
-    brick.inputs["Color1"].default_value = (0.205, 0.100, 0.045, 1)
-    brick.inputs["Color2"].default_value = (0.330, 0.180, 0.085, 1)
+    brick.inputs["Color1"].default_value = (0.300, 0.180, 0.095, 1)
+    brick.inputs["Color2"].default_value = (0.430, 0.270, 0.150, 1)
     brick.inputs["Mortar"].default_value = (0.030, 0.016, 0.009, 1)
     nt.links.new(brick.inputs["Vector"], mapping.outputs["Vector"])
 
@@ -261,7 +263,46 @@ def mat_floor():
     wear_mix.inputs["Fac"].default_value = 0.30
     nt.links.new(wear_mix.inputs["Color1"], grain_mix.outputs["Color"])
     nt.links.new(wear_mix.inputs["Color2"], wear.outputs["Fac"])
-    nt.links.new(bsdf.inputs["Base Color"], wear_mix.outputs["Color"])
+
+    # Вытоптанная дорожка посередине. Это главное отличие живого пола от
+    # ровно зашумлённого: у поверхности должна быть ПАМЯТЬ о том, что по ней
+    # ходили, а шум её не даёт - он не знает, где середина коридора.
+    #
+    # Считается по координате поперёк прохода: |x| мало - середина. Дорожка
+    # темнее (грязь втоптана) и ГЛАДЧЕ (лак отполирован подошвами), поэтому
+    # она же входит в шероховатость ниже.
+    sep = nt.nodes.new("ShaderNodeSeparateXYZ")
+    sep.location = (-1200, -900)
+    nt.links.new(sep.inputs["Vector"], coord.outputs["Object"])
+    across = nt.nodes.new("ShaderNodeMath")
+    across.location = (-1030, -900)
+    across.operation = "ABSOLUTE"
+    nt.links.new(across.inputs[0], sep.outputs["X"])
+    path = nt.nodes.new("ShaderNodeMapRange")
+    path.location = (-870, -900)
+    path.inputs["From Min"].default_value = 0.35   # ядро дорожки
+    path.inputs["From Max"].default_value = 1.25   # край, дальше чистый пол
+    path.inputs["To Min"].default_value = 0.0      # 0 - вытоптано
+    path.inputs["To Max"].default_value = 1.0
+    path.clamp = True
+    nt.links.new(path.inputs["Value"], across.outputs["Value"])
+    # Край дорожки не по линейке: подмешиваем крупный шум, иначе выйдет
+    # нарисованная полоса, а не след ходьбы.
+    path_noise = _noise(nt, coord, 1.6, 3.0, (-1030, -1150))
+    path_mix = nt.nodes.new("ShaderNodeMixRGB")
+    path_mix.location = (-700, -900)
+    path_mix.blend_type = "MIX"
+    path_mix.inputs["Fac"].default_value = 0.35
+    nt.links.new(path_mix.inputs["Color1"], path.outputs["Result"])
+    nt.links.new(path_mix.inputs["Color2"], path_noise.outputs["Fac"])
+
+    walk_dark = nt.nodes.new("ShaderNodeMixRGB")
+    walk_dark.location = (-230, 0)
+    walk_dark.blend_type = "MULTIPLY"
+    walk_dark.inputs["Fac"].default_value = 0.45
+    nt.links.new(walk_dark.inputs["Color1"], wear_mix.outputs["Color"])
+    nt.links.new(walk_dark.inputs["Color2"], path_mix.outputs["Color"])
+    nt.links.new(bsdf.inputs["Base Color"], walk_dark.outputs["Color"])
 
     # Лак вытерт пятнами: блеск неоднородный, иначе пол читается пластиком.
     rough = nt.nodes.new("ShaderNodeMapRange")
@@ -269,11 +310,23 @@ def mat_floor():
     rough.inputs["To Min"].default_value = 0.28
     rough.inputs["To Max"].default_value = 0.62
     nt.links.new(rough.inputs["Value"], wear.outputs["Fac"])
-    nt.links.new(bsdf.inputs["Roughness"], rough.outputs["Result"])
+    # Дорожка глаже остального пола: подошвы полируют. Берём минимум из двух -
+    # где вытоптано, там блеск, независимо от пятен лака.
+    rough_path = nt.nodes.new("ShaderNodeMapRange")
+    rough_path.location = (-400, -640)
+    rough_path.inputs["To Min"].default_value = 0.16
+    rough_path.inputs["To Max"].default_value = 0.70
+    nt.links.new(rough_path.inputs["Value"], path_mix.outputs["Color"])
+    rough_min = nt.nodes.new("ShaderNodeMath")
+    rough_min.location = (-230, -500)
+    rough_min.operation = "MINIMUM"
+    nt.links.new(rough_min.inputs[0], rough.outputs["Result"])
+    nt.links.new(rough_min.inputs[1], rough_path.outputs["Result"])
+    nt.links.new(bsdf.inputs["Roughness"], rough_min.outputs["Value"])
 
     bump = nt.nodes.new("ShaderNodeBump")
     bump.location = (-200, -600)
-    bump.inputs["Strength"].default_value = 0.25
+    bump.inputs["Strength"].default_value = 0.4
     nt.links.new(bump.inputs["Height"], brick.outputs["Fac"])
     nt.links.new(bsdf.inputs["Normal"], bump.outputs["Normal"])
     return mat
@@ -315,13 +368,43 @@ def mat_plaster(name, color, streaks=0.35):
     nt.links.new(mix.inputs["Fac"], ramp.outputs["Color"])
     nt.links.new(mix.inputs["Color1"], dirt.outputs[0])
     nt.links.new(mix.inputs["Color2"], base.outputs[0])
-    nt.links.new(bsdf.inputs["Base Color"], mix.outputs["Color"])
+
+    # Затёртость у пола. Стену пачкают снизу - обувью, швабрами, спинами
+    # сидящих; на референсе низ стены заметно грязнее верха, и без этого
+    # штукатурка читается свежепокрашенной. Высота берётся из координаты Z,
+    # а край размывается шумом, иначе выйдет ровная полоса по линейке.
+    sep = nt.nodes.new("ShaderNodeSeparateXYZ")
+    sep.location = (-950, -900)
+    nt.links.new(sep.inputs["Vector"], coord.outputs["Object"])
+    low = nt.nodes.new("ShaderNodeMapRange")
+    low.location = (-780, -900)
+    low.inputs["From Min"].default_value = 0.05    # у самого пола - грязнее всего
+    low.inputs["From Max"].default_value = 1.15    # выше пояса уже чисто
+    low.inputs["To Min"].default_value = 0.0
+    low.inputs["To Max"].default_value = 1.0
+    low.clamp = True
+    nt.links.new(low.inputs["Value"], sep.outputs["Z"])
+    low_noise = _noise(nt, coord, 2.2, 4.0, (-780, -1150))
+    low_mix = nt.nodes.new("ShaderNodeMixRGB")
+    low_mix.location = (-560, -900)
+    low_mix.blend_type = "MIX"
+    low_mix.inputs["Fac"].default_value = 0.4
+    nt.links.new(low_mix.inputs["Color1"], low.outputs["Result"])
+    nt.links.new(low_mix.inputs["Color2"], low_noise.outputs["Fac"])
+
+    grime = nt.nodes.new("ShaderNodeMixRGB")
+    grime.location = (-40, 100)
+    grime.blend_type = "MULTIPLY"
+    grime.inputs["Fac"].default_value = 0.55
+    nt.links.new(grime.inputs["Color1"], mix.outputs["Color"])
+    nt.links.new(grime.inputs["Color2"], low_mix.outputs["Color"])
+    nt.links.new(bsdf.inputs["Base Color"], grime.outputs["Color"])
 
     bsdf.inputs["Roughness"].default_value = 0.92
     fine = _noise(nt, coord, 60.0, 2.0, (-420, -800))
     bump = nt.nodes.new("ShaderNodeBump")
     bump.location = (-200, -700)
-    bump.inputs["Strength"].default_value = 0.12
+    bump.inputs["Strength"].default_value = 0.2
     nt.links.new(bump.inputs["Height"], fine.outputs["Fac"])
     nt.links.new(bsdf.inputs["Normal"], bump.outputs["Normal"])
     return mat
@@ -675,9 +758,13 @@ def main():
 
     m = {
         "floor": mat_floor(),
-        "wall": mat_plaster("wall_plaster", (0.47, 0.51, 0.58), streaks=0.45),
-        "ceil": mat_plaster("ceiling_plaster", (0.24, 0.27, 0.34), streaks=0.25),
-        "locker": mat_metal("locker_metal", (0.32, 0.34, 0.31)),
+        # Палитра сведена по референсу. Главная правка - стены: были насыщенно
+        # синие, отчего коридор читался ночным. На референсе штукатурка светлая
+        # и почти серая, а холод в кадр приносит НЕ краска, а свет в тени;
+        # насыщенная стена спорит с этим и съедает тёплые пятна солнца.
+        "wall": mat_plaster("wall_plaster", (0.60, 0.61, 0.62), streaks=0.45),
+        "ceil": mat_plaster("ceiling_plaster", (0.30, 0.32, 0.37), streaks=0.25),
+        "locker": mat_metal("locker_metal", (0.38, 0.40, 0.37)),
         "handle": mat_metal("handle_metal", (0.62, 0.63, 0.60), 0.30, 0.9),
         "door": mat_wood("door_wood", (0.28, 0.155, 0.09)),
         "trim": mat_wood("trim_wood", (0.52, 0.44, 0.35), 0.55),

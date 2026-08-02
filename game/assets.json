@@ -105,10 +105,10 @@
     "bodies": 1,
     "center": [
       0.0,
-      1.65,
+      1.7,
       -7.5
     ],
-    "elapsed_sec": 13.3,
+    "elapsed_sec": 14.5,
     "error": "",
     "file": "assets/models/m_corridor_game.glb",
     "from": "m_corridor",
@@ -133,30 +133,30 @@
           "type": "SUN"
         }
       ],
-      "meshes": 172,
-      "tris_after": 2752,
-      "tris_before": 2752
+      "meshes": 181,
+      "tris_after": 3036,
+      "tris_before": 3036
     },
     "id": "m_corridor_game",
-    "imported_at": 1785671580.1328928,
+    "imported_at": 1785673895.4410763,
     "maps": {
-      "albedo": 141,
+      "albedo": 143,
       "emission": 0,
       "metallic": 109,
-      "normal": 0,
+      "normal": 12,
       "roughness": 109
     },
     "materials": 10,
-    "mb": 12.1,
-    "meshes": 172,
+    "mb": 15.2,
+    "meshes": 181,
     "ok": true,
     "shapes": 1,
     "size": [
-      5.2,
-      3.8,
+      4.0,
+      3.9,
       15.7
     ],
-    "surfaces": 172,
-    "triangles": 2752
+    "surfaces": 181,
+    "triangles": 3036
   }
 }

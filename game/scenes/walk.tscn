@@ -7,10 +7,9 @@
 ; месту: подбирать высоту руками пришлось бы заново после каждой правки
 ; локации.
 
-[gd_scene load_steps=10 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="PackedScene" path="res://assets/models/m_corridor_game.glb" id="1_location"]
-[ext_resource type="PackedScene" path="res://assets/models/m_61aabe_game.glb" id="2_bust"]
 [ext_resource type="Script" path="res://scripts/player.gd" id="3_player"]
 [ext_resource type="Script" path="res://scripts/location.gd" id="4_location_fix"]
 
@@ -21,7 +20,7 @@ background_color = Color(0.02, 0.025, 0.035, 1)
 ; референса. Рассеянного света мало нарочно: подними его, и солнечные пятна
 ; перестанут читаться, всё сравняется в ровные сумерки.
 ambient_light_source = 2
-ambient_light_color = Color(0.56, 0.59, 0.65, 1)
+ambient_light_color = Color(0.60, 0.61, 0.64, 1)
 ambient_light_energy = 0.85
 tonemap_mode = 3
 tonemap_white = 3.0
@@ -121,9 +120,6 @@ shadow_enabled = false
 [node name="Location" parent="." instance=ExtResource("1_location")]
 script = ExtResource("4_location_fix")
 
-[node name="Bust" parent="." instance=ExtResource("2_bust")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.256, -4)
-
 ; Точка появления - ВНУТРИ коридора. Он тянется по z от -15.35 до 0.35, и
 ; первая попытка ставила игрока в z=5, то есть за торцом, в пустоте: он падал
 ; двести метров вниз. Поймано пошаговым прогоном физики, а не глазами.
@@ -151,7 +147,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.85, 0)
 shape = SubResource("Capsule_player")
 
 [node name="Camera" type="Camera3D" parent="Player"]
-fov = 70.0
+fov = 48.0
 
 ; Приглашение взять управление. Без него захват мыши читается как зависание:
 ; курсор пропал, экран тёмный, и что делать - непонятно. Подсказка гаснет по

@@ -58,6 +58,12 @@ MAX_PX = 2048
 BAKEABLE = {
     "Base Color": ("DIFFUSE", "sRGB"),
     "Roughness": ("ROUGHNESS", "Non-Color"),
+    # Рельеф. Раньше его не было вовсе, и все поверхности уезжали в игру
+    # геометрически идеально плоскими - при скользящем солнце это половина
+    # картинки: доски пола, потёки штукатурки, вмятины на металле.
+    # Bump в glTF не существует, а карта нормалей - существует, и запекание
+    # переводит одно в другое.
+    "Normal": ("NORMAL", "Non-Color"),
 }
 
 
@@ -306,14 +312,24 @@ def main():
             node = nt.nodes.new("ShaderNodeTexImage")
             node.image = img
             node.location = (-300, 300 if name == "Base Color" else -100)
-            if img.colorspace_settings.name == "Non-Color":
-                nt.links.new(bsdf.inputs[name], node.outputs["Color"])
+            if name == "Normal":
+                # Карта нормалей подключается ЧЕРЕЗ узел Normal Map, а не
+                # напрямую: вход Normal ждёт вектор, а не цвет. Подключённая
+                # напрямую картинка даёт правдоподобный, но неверный рельеф -
+                # и экспортёр glTF такой материал нормалью не считает вовсе.
+                nm = nt.nodes.new("ShaderNodeNormalMap")
+                nm.location = (-120, -420)
+                nt.links.new(nm.inputs["Color"], node.outputs["Color"])
+                nt.links.new(bsdf.inputs["Normal"], nm.outputs["Normal"])
             else:
                 nt.links.new(bsdf.inputs[name], node.outputs["Color"])
             mean, dev = spread_of(img)
             info = report["materials"][mat.name].setdefault("проверка", {})
-            info[name] = {"среднее": mean, "разброс": dev,
-                          "запеклось": dev > 1e-4 or mean > 1e-3}
+            # У карты нормалей «непустая» проверка по среднему не работает:
+            # ровная карта это сплошной (0.5, 0.5, 1.0), среднее у неё большое
+            # при полном отсутствии рельефа. Судим только по разбросу.
+            ok = dev > 1e-3 if name == "Normal" else (dev > 1e-4 or mean > 1e-3)
+            info[name] = {"среднее": mean, "разброс": dev, "запеклось": ok}
             img.pack()
 
     # Узел-приёмник больше не нужен: он остался бы активным и следующее
