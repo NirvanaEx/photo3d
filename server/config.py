@@ -38,9 +38,18 @@ TRELLIS_SCRIPTS = ROOT / "pipeline" / "trellis"
 # на 12 ГБ они всё равно не идут.
 TRELLIS_PIPELINE_TYPE = os.environ.get("PHOTO3D_TRELLIS_TYPE", "512")
 
-# У авторов в примере 4096, но это под 24 ГБ видеопамяти.
-TRELLIS_TEXTURE_SIZE = int(os.environ.get("PHOTO3D_TRELLIS_TEXTURE", "2048"))
-TRELLIS_DECIMATION = int(os.environ.get("PHOTO3D_TRELLIS_DECIMATION", "300000"))
+# Эти два значения связаны, и связь неочевидная: развёртка строится
+# автоматически по сетке из marching cubes, поэтому каждый треугольник
+# получает свой лоскут, а между лоскутами остаётся незаполненный фон. Чем
+# больше граней на ту же карту, тем мельче лоскуты - и тем сильнее чёрный
+# фон затекает в них при сглаживании текстуры.
+#
+# Замер: 300 000 граней на карту 2048 дают ~14 пикселей на треугольник, и
+# модель выглядит испачканной, особенно на гладких местах вроде лица.
+# 80 000 граней на 4096 дают ~210 пикселей - грязь уходит полностью, время
+# генерации то же. Подробностей формы при этом хватает с запасом.
+TRELLIS_TEXTURE_SIZE = int(os.environ.get("PHOTO3D_TRELLIS_TEXTURE", "4096"))
+TRELLIS_DECIMATION = int(os.environ.get("PHOTO3D_TRELLIS_DECIMATION", "80000"))
 
 # Генерация вместе с загрузкой весов с диска идёт минуты, а не секунды.
 TRELLIS_TIMEOUT_SEC = int(os.environ.get("PHOTO3D_TRELLIS_TIMEOUT", "1800"))
