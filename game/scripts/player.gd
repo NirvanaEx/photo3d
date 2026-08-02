@@ -41,7 +41,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		cam.rotation.x = clampf(cam.rotation.x, -1.4, 1.4)
 	elif event is InputEventKey and event.pressed \
 			and event.physical_keycode == KEY_ESCAPE:
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		# Первый Esc отпускает мышь, второй закрывает окно. Без второго шага
+		# человек оказывается заперт: мышь свободна, а выйти нечем, кроме
+		# Alt+F4. Порядок именно такой, чтобы случайный Esc не выбрасывал из
+		# игры целиком.
+		if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		else:
+			get_tree().quit()
 	elif event is InputEventMouseButton and event.pressed:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
