@@ -1,0 +1,18 @@
+{
+  "source": "/mnt/d/Develop/photo3d/data/output/m_13c5d0/model.glb",
+  "derived_from": "m_13c5d0",
+  "stats": {
+    "engine": "sculpt-prep",
+    "mode": "12000 граней",
+    "seed": 0,
+    "vertices": 11914,
+    "faces": 11912,
+    "watertight": true
+  },
+  "elapsed_sec": 39.4376015663147,
+  "render_engine": "cycles",
+  "views": 24,
+  "style": "beauty",
+  "id": "m_b1f135",
+  "updated_at": 1785604866.3205545
+}

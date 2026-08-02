@@ -1,0 +1,17 @@
+{
+  "source": "/mnt/d/Develop/photo3d/data/input/demo_heart.png",
+  "stats": {
+    "engine": "stub",
+    "mode": "quality",
+    "seed": 42,
+    "vertices": 10186,
+    "faces": 20572,
+    "watertight": false,
+    "grid": 128
+  },
+  "elapsed_sec": 3.5193190574645996,
+  "render_engine": "workbench",
+  "views": 4,
+  "id": "m_e8659c",
+  "updated_at": 1785596989.2921424
+}

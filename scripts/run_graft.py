@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import sys
 import time
+from pathlib import Path
 
 sys.path.insert(0, "/mnt/d/Develop/photo3d")
 
@@ -21,10 +22,12 @@ from server.store import ModelStore  # noqa: E402
 
 def main() -> int:
     body_id, head_id = sys.argv[1], sys.argv[2]
-    plan = config.CACHE_DIR / f"graft_{body_id}_{head_id}.json"
+    tag = f"{body_id}_{head_id}".replace(":", "-").replace(".glb", "")
+    plan = config.CACHE_DIR / f"graft_{tag}.json"
     if not plan.exists():
         print(f"нет плана {plan} - сначала scripts/graft_head.py")
         return 1
+    spec = json.loads(plan.read_text(encoding="utf-8"))
 
     store = ModelStore()
     new_id, mdir = store.create()
@@ -32,10 +35,7 @@ def main() -> int:
     started = time.time()
 
     print(f"{new_id}: тело {body_id} + голова {head_id}")
-    stats = graft.merge(
-        config.OUTPUT_DIR / body_id / "model.glb",
-        config.OUTPUT_DIR / head_id / "model.glb",
-        plan, out)
+    stats = graft.merge(Path(spec["body"]), Path(spec["head"]), plan, out)
     log = stats.pop("log", "")
     print(json.dumps(stats, ensure_ascii=False, indent=2))
 

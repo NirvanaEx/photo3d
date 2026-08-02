@@ -1,0 +1,17 @@
+{
+  "source": "/mnt/d/Develop/photo3d/data/input/selftest_star.png",
+  "stats": {
+    "engine": "stub",
+    "mode": "fast",
+    "seed": 7,
+    "vertices": 1622,
+    "faces": 3416,
+    "watertight": false,
+    "grid": 72
+  },
+  "elapsed_sec": 1.0990889072418213,
+  "render_engine": "workbench",
+  "views": 4,
+  "id": "m_d4c76c",
+  "updated_at": 1785596221.3826249
+}

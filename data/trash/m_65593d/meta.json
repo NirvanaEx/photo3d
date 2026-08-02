@@ -1,0 +1,17 @@
+{
+  "source": "/mnt/d/Develop/photo3d/data/output/m_e8659c/model.glb",
+  "derived_from": "m_e8659c",
+  "stats": {
+    "engine": "sculpt-prep",
+    "mode": "5000 граней",
+    "seed": 0,
+    "vertices": 4844,
+    "faces": 4842,
+    "watertight": true
+  },
+  "elapsed_sec": 2.101027250289917,
+  "render_engine": "workbench",
+  "views": 4,
+  "id": "m_65593d",
+  "updated_at": 1785598122.6258125
+}

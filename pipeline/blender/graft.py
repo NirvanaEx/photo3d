@@ -36,9 +36,11 @@ def parse_args():
     p.add_argument("--head", required=True)
     p.add_argument("--plan", required=True)
     p.add_argument("--out", required=True)
-    # Насколько ниже плоскости среза оставить тело: небольшое перекрытие
-    # нужно, чтобы шов заполнился, а не разошёлся щелью
-    p.add_argument("--overlap", type=float, default=0.03)
+    # Насколько ВЫШЕ плоскости стыка оставить тело. Знак тут решает всё:
+    # cut_above убирает всё над уровнем, поэтому срез НИЖЕ плоскости удаляет
+    # лишнее и оставляет щель, а не нахлёст. Первая версия ошиблась именно
+    # здесь, и на стыке зияла чёрная полоса.
+    p.add_argument("--overlap", type=float, default=0.06)
     return p.parse_args(argv)
 
 
@@ -68,9 +70,12 @@ def join(objs, name):
     return obj
 
 
-def cut_above(obj, axis, level):
-    """Срезать всё выше уровня. Оператор bisect в фоне капризен, поэтому
-    работаем через bmesh - он от контекста не зависит."""
+def cut_plane(obj, axis, level, keep):
+    """Отрезать половину меша по плоскости. keep - 'below' или 'above'.
+
+    Оператор bisect в фоновом режиме капризен, поэтому работаем через bmesh:
+    он от контекста не зависит.
+    """
     mesh = obj.data
     bm = bmesh.new()
     bm.from_mesh(mesh)
@@ -84,7 +89,7 @@ def cut_above(obj, axis, level):
     bmesh.ops.bisect_plane(
         bm, geom=list(bm.verts) + list(bm.edges) + list(bm.faces),
         plane_co=Vector(origin), plane_no=Vector(normal),
-        clear_outer=True, clear_inner=False,
+        clear_outer=(keep == "below"), clear_inner=(keep == "above"),
     )
     after = len(bm.faces)
     bm.to_mesh(mesh)
@@ -122,9 +127,27 @@ def main():
 
     head.matrix_world = matrix @ head.matrix_world
 
-    # тело режем чуть ниже плоскости, чтобы голова заходила внахлёст
-    level = cut_level - (body.dimensions[cut_axis] * a.overlap)
-    before, after = cut_above(body, cut_axis, level)
+    # Преобразования впечатываются в сами меши. Без этого резка врёт:
+    # bmesh работает с данными меша, то есть в ЛОКАЛЬНЫХ координатах объекта,
+    # а уровень плоскости посчитан в мировых. У тела они совпадали случайно,
+    # а голове мы только что задали матрицу со сдвигом, поворотом и масштабом
+    # 0.54 - и плоскость среза уезжала, отрезая пол-лица вместо шеи.
+    for obj in (body, head):
+        obj.data.transform(obj.matrix_world)
+        obj.matrix_world = Matrix.Identity(4)
+
+    # Режем ОБА, по одной плоскости шеи. От головы берётся верх, от тела низ.
+    # Плечи и куртка остаются телу - так снимается и вопрос с разным тоном
+    # у двух независимо сгенерированных моделей.
+    #
+    # Телу оставляем немного выше плоскости, чтобы его шея заходила внутрь
+    # головы внахлёст. Знак важен: cut_plane(keep="below") убирает всё над
+    # уровнем, поэтому уровень НИЖЕ плоскости оставил бы щель.
+    span = body.dimensions[cut_axis]
+    body_before, body_after = cut_plane(
+        body, cut_axis, cut_level + span * a.overlap, keep="below")
+    head_before, head_after = cut_plane(
+        head, cut_axis, cut_level - span * a.overlap, keep="above")
 
     merged = join([body, head], "merged")
 
@@ -133,9 +156,9 @@ def main():
     stats = {
         "оси": note,
         "срез_по": "XYZ"[cut_axis],
-        "уровень": round(level, 4),
-        "граней_тела_до": before,
-        "граней_тела_после": after,
+        "уровень": round(cut_level, 4),
+        "тело": f"{body_before} -> {body_after} граней (низ)",
+        "голова": f"{head_before} -> {head_after} граней (верх)",
         "граней_итого": len(merged.data.polygons),
         "материалов": len(merged.data.materials),
     }

@@ -1,0 +1,30 @@
+{
+  "source": "/mnt/d/Develop/photo3d/data/input/demo_heart.png",
+  "stats": {
+    "engine": "stub",
+    "mode": "quality",
+    "seed": 42,
+    "vertices": 10346,
+    "faces": 20497,
+    "watertight": false,
+    "grid": 128
+  },
+  "elapsed_sec": 5.996596813201904,
+  "render_engine": "cycles",
+  "views": 24,
+  "id": "m_13c5d0",
+  "updated_at": 1785605191.1390257,
+  "style": "beauty",
+  "smooth": {
+    "strength": 0.45,
+    "iterations": 8,
+    "subdivide": 0,
+    "method": "preserve"
+  },
+  "paint": {
+    "color": null,
+    "from_photo": true,
+    "metallic": 0.0,
+    "roughness": 0.45
+  }
+}
