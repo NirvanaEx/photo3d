@@ -29,6 +29,48 @@
     "surfaces": 2,
     "triangles": 118929
   },
+  "m_61aabe_game": {
+    "bodies": 1,
+    "center": [
+      0.0,
+      0.004,
+      -0.007
+    ],
+    "elapsed_sec": 5.3,
+    "error": "",
+    "file": "assets/models/m_61aabe_game.glb",
+    "from": "m_61aabe",
+    "gameready": {
+      "cameras_dropped": 0,
+      "collider_mode": "colonly",
+      "collider_tris": 900,
+      "lights_dropped": 0,
+      "meshes": 1,
+      "tris_after": 20000,
+      "tris_before": 118929
+    },
+    "id": "m_61aabe_game",
+    "imported_at": 1785669091.819562,
+    "maps": {
+      "albedo": 2,
+      "emission": 0,
+      "metallic": 2,
+      "normal": 0,
+      "roughness": 2
+    },
+    "materials": 2,
+    "mb": 44.5,
+    "meshes": 1,
+    "ok": true,
+    "shapes": 1,
+    "size": [
+      0.696,
+      1.017,
+      0.469
+    ],
+    "surfaces": 2,
+    "triangles": 20000
+  },
   "m_corridor": {
     "center": [
       0.0,
@@ -51,6 +93,64 @@
     "mb": 11.3,
     "meshes": 172,
     "ok": true,
+    "size": [
+      3.8,
+      4.0,
+      15.7
+    ],
+    "surfaces": 172,
+    "triangles": 2756
+  },
+  "m_corridor_game": {
+    "bodies": 1,
+    "center": [
+      0.0,
+      1.75,
+      -7.5
+    ],
+    "elapsed_sec": 4.5,
+    "error": "",
+    "file": "assets/models/m_corridor_game.glb",
+    "from": "m_corridor",
+    "gameready": {
+      "cameras_dropped": 0,
+      "collider_mode": "colonly",
+      "collider_tris": 2000,
+      "lights_dropped": [
+        {
+          "color": [
+            1.0,
+            0.87,
+            0.7
+          ],
+          "dir_godot": [
+            -0.769,
+            -0.559,
+            0.311
+          ],
+          "energy_blender": 42.0,
+          "name": "sun",
+          "type": "SUN"
+        }
+      ],
+      "meshes": 172,
+      "tris_after": 2756,
+      "tris_before": 2756
+    },
+    "id": "m_corridor_game",
+    "imported_at": 1785669263.8905187,
+    "maps": {
+      "albedo": 141,
+      "emission": 0,
+      "metallic": 109,
+      "normal": 0,
+      "roughness": 109
+    },
+    "materials": 10,
+    "mb": 11.4,
+    "meshes": 172,
+    "ok": true,
+    "shapes": 1,
     "size": [
       3.8,
       4.0,

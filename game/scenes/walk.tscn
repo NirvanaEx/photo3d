@@ -1,0 +1,77 @@
+; Ходьба по локации. Собрана из game-ready ассета: в нём рядом с видимой
+; сеткой лежит грубая оболочка -colonly, из которой импортёр Godot сам сделал
+; StaticBody3D. Поэтому в сцене нет ни одного узла столкновений - они внутри
+; ассета, и это проверено замером (тел 1, форм 1).
+;
+; Игрок ставится ВЫШЕ пола и падает на него тяжестью, а не выставляется по
+; месту: подбирать высоту руками пришлось бы заново после каждой правки
+; локации.
+
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="PackedScene" path="res://assets/models/m_corridor_game.glb" id="1_location"]
+[ext_resource type="PackedScene" path="res://assets/models/m_61aabe_game.glb" id="2_bust"]
+[ext_resource type="Script" path="res://scripts/player.gd" id="3_player"]
+[ext_resource type="Script" path="res://scripts/location.gd" id="4_location_fix"]
+
+[sub_resource type="Environment" id="Environment_walk"]
+background_mode = 1
+background_color = Color(0.03, 0.04, 0.05, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.5, 0.55, 0.62, 1)
+ambient_light_energy = 0.55
+tonemap_mode = 3
+fog_enabled = true
+fog_light_color = Color(0.4, 0.45, 0.55, 1)
+fog_density = 0.02
+
+[sub_resource type="CapsuleShape3D" id="Capsule_player"]
+radius = 0.32
+height = 1.7
+
+[node name="Walk" type="Node3D"]
+
+[node name="World" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_walk")
+
+; Солнце СВОЁ, а не приехавшее в ассете: game-ready ассеты возят геометрию и
+; столкновения, свет принадлежит сцене. Так его видно в тексте и так его
+; правят - в отличие от солнца внутри GLB, которое светит с яркостью 28 686
+; и находится только замером (docs/PITFALLS.md).
+; Направление задано углами, а не матрицей: так видно, куда светит. Окна у
+; коридора на стене +X, поэтому поворот на 90 по Y разворачивает луч со
+; стороны окон внутрь, а -35 по X опускает солнце к горизонту - тогда пятна
+; света ложатся на пол, а не на потолок.
+[node name="Sun" type="DirectionalLight3D" parent="."]
+; Направление НЕ подобрано на глаз: оно взято из самой локации. gameready
+; выбрасывает свет из ассета, но печатает его параметры, и для коридора это
+; dir_godot [-0.769, -0.559, 0.311] при цвете (1, 0.87, 0.7). Базис ниже
+; собран так, что его -Z равен этому вектору. Подбор вручную до этого дважды
+; промахивался: пятна ложились то на стену под потолком, то мимо кадра.
+transform = Transform3D(-0.375, 0, -0.927, -0.518, 0.83, 0.21, 0.769, 0.559, -0.311, 0, 6, 0)
+light_energy = 1.8
+light_color = Color(1, 0.87, 0.7, 1)
+shadow_enabled = true
+
+; Скрипт снимает тень со стекла: иначе окна работают как заложенные
+; проёмы, и внутри темно при направленном в них солнце.
+[node name="Location" parent="." instance=ExtResource("1_location")]
+script = ExtResource("4_location_fix")
+
+[node name="Bust" parent="." instance=ExtResource("2_bust")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.256, -4)
+
+; Точка появления - ВНУТРИ коридора. Он тянется по z от -15.35 до 0.35, и
+; первая попытка ставила игрока в z=5, то есть за торцом, в пустоте: он падал
+; двести метров вниз. Поймано пошаговым прогоном физики, а не глазами.
+[node name="Player" type="CharacterBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, -1.5)
+script = ExtResource("3_player")
+
+[node name="Shape" type="CollisionShape3D" parent="Player"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.85, 0)
+shape = SubResource("Capsule_player")
+
+[node name="Camera" type="Camera3D" parent="Player"]
+fov = 70.0
+

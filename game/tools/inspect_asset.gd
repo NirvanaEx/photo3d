@@ -69,9 +69,17 @@ func _initialize() -> void:
 				if m.normal_texture != null: maps["normal"] += 1
 				if m.emission_texture != null: maps["emission"] += 1
 
+	# Тела столкновений считаются отдельно, потому что ради них всё и затевалось.
+	# Меш с суффиксом -colonly импортёр поглощает: в списке мешей его уже нет,
+	# и по одному их числу нельзя понять, приехали столкновения или потерялись.
+	var bodies := _count(root, "StaticBody3D")
+	var shapes := _count(root, "CollisionShape3D")
+
 	root.free()
 	_emit({
 		"ok": tris > 0,
+		"bodies": bodies,
+		"shapes": shapes,
 		"error": "" if tris > 0 else "сцена импортировалась пустой: ноль треугольников",
 		"meshes": meshes.size(),
 		"surfaces": surfaces,
@@ -87,6 +95,13 @@ func _initialize() -> void:
 			snappedf(aabb.get_center().y, 0.001),
 			snappedf(aabb.get_center().z, 0.001)],
 	})
+
+
+func _count(node: Node, cls: String) -> int:
+	var n := 1 if node.is_class(cls) else 0
+	for c in node.get_children():
+		n += _count(c, cls)
+	return n
 
 
 func _walk(node: Node, out: Array[MeshInstance3D]) -> void:

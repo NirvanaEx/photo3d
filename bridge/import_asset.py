@@ -114,7 +114,16 @@ def _manifest_put(model_id: str, info: dict[str, Any]) -> None:
     os.replace(tmp, MANIFEST)
 
 
-def import_asset(model_id: str | None = None) -> dict[str, Any]:
+def import_asset(model_id: str | None = None, gameready: bool = False,
+                 faces: int = 20000, collider: int = 1500) -> dict[str, Any]:
+    """Перенести модель в проект игры.
+
+    gameready=True прогоняет её через pipeline.gameready: видимая сетка
+    ужимается до бюджета, а рядом кладётся грубая оболочка столкновений с
+    суффиксом -colonly, из которой импортёр Godot сам делает тело. Без этого
+    по модели можно смотреть, но не ходить: 120 тысяч треугольников в физике
+    неподъёмны.
+    """
     store = ModelStore()
     mid = store.resolve(model_id)
     src = store.glb(mid)
@@ -125,33 +134,48 @@ def import_asset(model_id: str | None = None) -> dict[str, Any]:
             hint="проверь list_models() и возьми модель, у которой есть GLB",
         )
 
+    prep: dict[str, Any] = {}
+    name = mid
+    if gameready:
+        # Кладём в кэш, а не в папку модели: это производное от model.glb,
+        # пересобирается за секунды и в библиотеке отдельной карточкой не нужно.
+        from pipeline.gameready import prepare
+        name = f"{mid}_game"
+        cooked = config.CACHE_DIR / "gameready" / f"{name}.glb"
+        prep = prepare(src, cooked, faces=faces, collider=collider)
+        prep.pop("log", None)
+        src = cooked
+
     config.GAME_ASSETS.mkdir(parents=True, exist_ok=True)
-    dst = config.GAME_ASSETS / f"{mid}.glb"
+    dst = config.GAME_ASSETS / f"{name}.glb"
     shutil.copy2(src, dst)
 
     t0 = time.time()
     _godot(["--import"], "assets")
     info = _parse(_godot(
-        ["--script", "res://tools/inspect_asset.gd", "--", mid], "assets"), "assets")
+        ["--script", "res://tools/inspect_asset.gd", "--", name], "assets"), "assets")
     elapsed = round(time.time() - t0, 1)
 
     if not info.get("ok"):
         raise PipelineError(
             "assets",
-            f"{mid}: {info.get('error') or 'импорт дал пустую сцену'}",
+            f"{name}: {info.get('error') or 'импорт дал пустую сцену'}",
             hint=("открой GLB в любом вьюере и убедись, что в нём есть меш. "
                   "Если есть - удали game/.godot и повтори: кэш импорта мог "
                   "остаться от прежней версии файла"),
         )
 
     info |= {
-        "id": mid,
-        "file": f"assets/models/{mid}.glb",
+        "id": name,
+        "from": mid,
+        "file": f"assets/models/{name}.glb",
         "mb": round(dst.stat().st_size / 1048576, 1),
         "elapsed_sec": elapsed,
         "imported_at": time.time(),
     }
-    _manifest_put(mid, info)
+    if prep:
+        info["gameready"] = prep
+    _manifest_put(name, info)
     return info
 
 
@@ -163,6 +187,8 @@ def describe(info: dict[str, Any]) -> str:
         f"{info['id']} -> {info['file']} ({info['mb']} МБ, {info['elapsed_sec']} с)\n"
         f"  мешей {info['meshes']}, поверхностей {info['surfaces']}, "
         f"треугольников {info['triangles']}, материалов {info['materials']}\n"
+        f"  столкновения: тел {info.get('bodies', 0)}, "
+        f"форм {info.get('shapes', 0)}\n"
         f"  карты: {have}\n"
         f"  габариты {size[0]} x {size[1]} x {size[2]} м"
     )
