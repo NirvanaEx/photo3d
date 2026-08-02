@@ -206,9 +206,17 @@ class StubEngine:
 # начинает затекать внутрь, пачкая гладкие поверхности. Гнаться за числом
 # граней тут вредно: 300 000 граней на карту 2048 выглядят ХУЖЕ, чем 80 000
 # на 4096, при том же времени работы.
+#
+# Шаги сэмплера - третья ручка, и она про другое. Разрешение текстуры и число
+# граней решают, насколько хорош ГОТОВЫЙ предмет; шаги решают, сколько стоит
+# УЗНАТЬ, тот ли он вообще. Черновик нужен там, где ответ «не тот предмет» и
+# «не тот ракурс» приходит одинаково быстро при шести шагах и при двенадцати,
+# а платить за это полный прогон незачем: seed меняют по силуэту, а не по
+# текстуре.
 _MODES = {
-    "fast": {"texture": 2048, "decimation": 40_000},
-    "quality": {"texture": 4096, "decimation": 80_000},
+    "draft": {"texture": 1024, "decimation": 15_000, "steps": 6},
+    "fast": {"texture": 2048, "decimation": 40_000, "steps": 0},
+    "quality": {"texture": 4096, "decimation": 80_000, "steps": 0},
 }
 
 
@@ -238,7 +246,14 @@ class TrellisEngine:
         from server.errors import PipelineError
         from pipeline import preprocess
 
-        params = _MODES.get(mode, _MODES["quality"])
+        # Опечатка в режиме раньше молча уезжала в quality: восемь минут вместо
+        # двух и текстура 4096 там, где просили черновик. С появлением третьего
+        # режима промахнуться стало легче, а тихий откат - дороже.
+        if mode not in _MODES:
+            raise PipelineError(
+                "generate", f"режим {mode!r} неизвестен",
+                hint="доступны: " + ", ".join(_MODES))
+        params = _MODES[mode]
         workdir = out_glb.parent
         workdir.mkdir(parents=True, exist_ok=True)
 
@@ -268,6 +283,7 @@ class TrellisEngine:
             "--pipeline-type", config.TRELLIS_PIPELINE_TYPE,
             "--texture-size", str(params["texture"]),
             "--decimation-target", str(params["decimation"]),
+            "--steps", str(params["steps"]),
         ]
 
         proc = subprocess.run(cmd, capture_output=True, text=True,

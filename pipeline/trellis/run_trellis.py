@@ -384,6 +384,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--texture-size", dest="texture", type=int, default=2048)
     p.add_argument("--decimation-target", dest="decimation", type=int, default=300_000)
     p.add_argument("--max-tokens", dest="max_tokens", type=int, default=49152)
+    # Шагов сэмплера на каждом из трёх этапов. 0 - оставить как в конфиге
+    # весов (там 12). Меньше шагов - грубее форма, но заметно быстрее: это
+    # черновой прогон, по которому решают, тот ли вообще получился предмет.
+    p.add_argument("--steps", type=int, default=0)
     # Штатный путь загрузки - через оперативную память. Оставлен как запасной
     # выход: если правка загрузчика однажды разойдётся с новой версией
     # trellis2, сравнить с ним - дело одного флага, а не отката.
@@ -447,6 +451,12 @@ def main() -> int:
     stages["загрузка_с"] = round(time.time() - t, 1)
     print(f"low_vram={pipeline.low_vram}  режим={a.ptype}", file=sys.stderr, flush=True)
 
+    # Число шагов передаётся штатным путём: run() мержит эти словари с тем,
+    # что пришло из конфига весов, поэтому подменять ничего не нужно. Пустой
+    # словарь означает «как в конфиге», и это не то же самое, что steps=12:
+    # если авторы весов однажды поменяют значение, мы поедем за ними.
+    steps = {"steps": a.steps} if a.steps > 0 else {}
+
     torch.cuda.reset_peak_memory_stats()
     t = time.time()
     outputs = pipeline.run(
@@ -454,6 +464,9 @@ def main() -> int:
         seed=a.seed,
         pipeline_type=a.ptype,
         max_num_tokens=a.max_tokens,
+        sparse_structure_sampler_params=steps,
+        shape_slat_sampler_params=steps,
+        tex_slat_sampler_params=steps,
     )
     stages["генерация_с"] = round(time.time() - t, 1)
     peak_gen = vram()
@@ -499,6 +512,7 @@ def main() -> int:
         "watertight": bool(getattr(glb, "is_watertight", False)),
         # дальше - подробности сверх общего договора
         "texture_size": a.texture,
+        "шагов": a.steps or pipeline.sparse_structure_sampler_params.get("steps"),
         "время": stages,
         "всего_с": round(time.time() - t0, 1),
         "видеопамять": peak_gen,
