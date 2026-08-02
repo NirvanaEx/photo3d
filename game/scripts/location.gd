@@ -13,13 +13,49 @@ extends Node3D
 
 func _ready() -> void:
 	var off := 0
+	var glassed := 0
 	for mi in _meshes(self):
 		if _transparent(mi):
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			off += 1
+		elif _named_glass(mi):
+			# Заплатка, и названа заплаткой. Настоящее лечение - в экспорте
+			# локации: стекло должно уезжать в GLB с alphaMode=BLEND. Пока оно
+			# приезжает OPAQUE, распознать его можно только по имени материала,
+			# и это работает ровно до первого материала, названного иначе.
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			_make_glass(mi)
+			glassed += 1
+	# Вслух: молча изменившаяся сцена - худший вид «магии».
 	if off > 0:
-		# Вслух: молча изменившаяся сцена - худший вид «магии».
 		print("[location] тень снята с прозрачных мешей: %d" % off)
+	if glassed > 0:
+		# Строка одной длинной, а не двумя рядом: GDScript не склеивает соседние
+		# строковые литералы переносом, как это делает Python, - получается
+		# Parse Error на всём файле.
+		print("[location] ЗАПЛАТКА: стекло опознано по имени материала (%d шт.), в GLB оно приехало непрозрачным - чинить надо экспорт" % glassed)
+
+
+func _named_glass(mi: MeshInstance3D) -> bool:
+	var mesh: Mesh = mi.mesh
+	if mesh == null:
+		return false
+	for s in mesh.get_surface_count():
+		var m := mi.get_active_material(s)
+		if m != null and "glass" in m.resource_name.to_lower():
+			return true
+	return false
+
+
+func _make_glass(mi: MeshInstance3D) -> void:
+	for s in mi.mesh.get_surface_count():
+		var m := mi.get_active_material(s)
+		if m is BaseMaterial3D:
+			var g: BaseMaterial3D = m.duplicate()
+			g.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			g.albedo_color.a = 0.12
+			g.roughness = 0.05
+			mi.set_surface_override_material(s, g)
 
 
 func _transparent(mi: MeshInstance3D) -> bool:

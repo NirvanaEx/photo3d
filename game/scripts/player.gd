@@ -25,12 +25,16 @@ var debug_move := Vector2.ZERO
 @export var mouse_sensitivity := 0.0022
 
 @onready var cam: Camera3D = $Camera
+@onready var hint: Label = get_node_or_null("../HUD/Hint")
 
 
 func _ready() -> void:
 	cam.position.y = EYE
-	if not debug_drive:
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	# Мышь НЕ захватывается на старте. Захват без спроса выглядит как зависание
+	# машины: курсор исчезает, окно может быть даже не в фокусе, и человек не
+	# понимает, что произошло. В вебе это уже решено приглашением «кликни,
+	# чтобы взять управление» - здесь то же самое.
+	_show_hint(true)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -47,10 +51,17 @@ func _unhandled_input(event: InputEvent) -> void:
 		# игры целиком.
 		if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+			_show_hint(true)
 		else:
 			get_tree().quit()
 	elif event is InputEventMouseButton and event.pressed:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		_show_hint(false)
+
+
+func _show_hint(on: bool) -> void:
+	if hint != null:
+		hint.visible = on
 
 
 func _physics_process(delta: float) -> void:
