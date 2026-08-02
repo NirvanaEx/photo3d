@@ -825,6 +825,7 @@ async def shot_scene(
     elevation: float = 15,
     res: int = 1024,
     unshaded: bool = False,
+    reference: str = "",
 ) -> list:
     """Снять кадры из сцены Godot - глаза в собранном мире.
 
@@ -850,13 +851,18 @@ async def shot_scene(
     unshaded:  снять ДОПОЛНИТЕЛЬНЫЙ кадр без единой лампы, только альбедо.
                Это способ отличить «текстура не доехала» от «сцена
                пересвечена» - на обычном кадре они выглядят одинаково белыми
+    reference: путь к эталонной картинке (имя в data/input, POSIX или
+               D:\\...). Каждый кадр вернётся склейкой: сверху движок, снизу
+               референс. Так атмосфера сводится глазами и итерациями - тем же
+               способом, каким оцениваются рендеры photo_to_3d
 
     Сцены пишутся текстом: правь .tscn и снимай снова. Свет, туман и
     тонмаппинг - обычные свойства WorldEnvironment, менять их правкой файла.
     """
     def _work():
         return shots.shot_scene(scene, views=views, azimuth=azimuth,
-                                elevation=elevation, res=res, unshaded=unshaded)
+                                elevation=elevation, res=res, unshaded=unshaded,
+                                reference=reference or None)
 
     r = await anyio.to_thread.run_sync(_work)
     return [shots.describe(r), *[Image(path=str(s["path"])) for s in r["shots"]]]

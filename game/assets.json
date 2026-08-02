@@ -108,7 +108,7 @@
       1.7,
       -7.5
     ],
-    "elapsed_sec": 14.5,
+    "elapsed_sec": 20.6,
     "error": "",
     "file": "assets/models/m_corridor_game.glb",
     "from": "m_corridor",
@@ -138,16 +138,16 @@
       "tris_before": 3036
     },
     "id": "m_corridor_game",
-    "imported_at": 1785673895.4410763,
+    "imported_at": 1785677222.6317005,
     "maps": {
       "albedo": 143,
       "emission": 0,
-      "metallic": 109,
+      "metallic": 117,
       "normal": 12,
-      "roughness": 109
+      "roughness": 117
     },
     "materials": 10,
-    "mb": 15.2,
+    "mb": 58.1,
     "meshes": 181,
     "ok": true,
     "shapes": 1,

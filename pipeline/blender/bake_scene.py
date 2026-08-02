@@ -97,6 +97,51 @@ def linked_inputs(bsdf):
             if bsdf.inputs[name].is_linked]
 
 
+# Узлы, из которых состоит уже готовый - «фотографический» - материал.
+# Ничего процедурного в нём нет, всё лежит картинками.
+# Сюда входит и то, чем скан ПОДГОНЯЮТ: тон множителем, диапазон
+# шероховатости через MapRange. Первая версия списка их не знала, и материал
+# из четырёх картинок считался процедурным - запекание честно съедало тайлинг,
+# ради которого всё и делалось.
+_IMAGE_ONLY = {"TEX_IMAGE", "MAPPING", "UVMAP", "TEX_COORD", "NORMAL_MAP",
+               "SEPARATE_COLOR", "MIX_RGB", "MIX", "RGB", "VALUE",
+               "MAP_RANGE", "MATH", "GAMMA", "BRIGHTCONTRAST", "HUE_SAT",
+               "INVERT", "CURVE_RGB", "VALTORGB"}
+
+
+def already_textured(bsdf):
+    """Материал уже собран из картинок - запекать его НЕЛЬЗЯ.
+
+    Запекание раскладывает материал в атлас на всю поверхность: пол площадью
+    136 м² на карту 2048 это 5.7 мм на тексель. Фотоскан, положенный тайлингом
+    по два метра, даёт 0.5 мм - и запекание выбросило бы эту разницу целиком,
+    честно отрапортовав об успехе.
+
+    Поэтому такие материалы уезжают в glTF как есть, со своими UV и повтором.
+    Формат это умеет; чего он не умеет - так это процедурных узлов, ради
+    которых запекание и заводилось.
+    """
+    seen, stack = set(), []
+    for name in BAKEABLE:
+        if bsdf.inputs[name].is_linked:
+            stack.append(bsdf.inputs[name].links[0].from_node)
+    if not stack:
+        return False
+    has_image = False
+    while stack:
+        node = stack.pop()
+        if node in seen:
+            continue
+        seen.add(node)
+        if node.type not in _IMAGE_ONLY:
+            return False
+        has_image = has_image or node.type == "TEX_IMAGE"
+        for inp in node.inputs:
+            for link in inp.links:
+                stack.append(link.from_node)
+    return has_image
+
+
 def pow2_clamped(value, lo, hi):
     px = 1 << max(0, int(value - 1)).bit_length()
     return max(lo, min(hi, px))
@@ -239,6 +284,11 @@ def main():
                     "в GLB уедет константа")
             if not inputs:
                 report["skipped"][mat.name] = "все входы константы, запекать нечего"
+                continue
+            if already_textured(bsdf):
+                report["skipped"][mat.name] = (
+                    "уже фотокартами с тайлингом: запекание в атлас срезало бы "
+                    "разрешение в разы")
                 continue
             faces = material_faces(obj, mat)
             if not faces:

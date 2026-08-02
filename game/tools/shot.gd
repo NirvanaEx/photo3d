@@ -54,6 +54,12 @@ func _run() -> void:
 	add_child(world)
 	await get_tree().process_frame       # дать _ready сцены отработать
 
+	# HUD гасится целиком: подсказки «кликни, чтобы взять управление»
+	# адресованы человеку с мышью, а в кадре для агента и в склейке с
+	# референсом они просто закрывают сцену. Прячется ПОСЛЕ process_frame -
+	# слой, который сцена создаёт в _ready, до него ещё не существует.
+	_hide_canvas(world)
+
 	var aabb := _bounds(world)
 	_stats = _describe(world, aabb)
 
@@ -202,6 +208,13 @@ func _count(node: Node, cls: String) -> int:
 	for c in node.get_children():
 		n += _count(c, cls)
 	return n
+
+
+func _hide_canvas(node: Node) -> void:
+	if node is CanvasLayer:
+		node.visible = false
+	for c in node.get_children():
+		_hide_canvas(c)
 
 
 func _walk_mesh(node: Node, out: Array[MeshInstance3D]) -> void:

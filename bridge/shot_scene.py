@@ -13,7 +13,12 @@ docs/PITFALLS.md. Окно живёт две-четыре секунды и за
 кадр не означает работающую сцену: скрипт может падать каждый кадр, а
 картинка при этом выйдет нормальной.
 
-    python -m bridge.shot_scene [сцена] [сколько кадров]
+Референс. Атмосфера сводится не по памяти, а глазами: reference= клеит каждый
+кадр с эталонной картинкой в одно изображение (сверху движок, снизу референс).
+Коридор уже сводили к референсу вручную, перекладывая глаза между двумя
+окнами, - склейка отдаёт то же сравнение агенту в один вызов.
+
+    python -m bridge.shot_scene [сцена] [сколько кадров] [референс]
 """
 from __future__ import annotations
 
@@ -87,6 +92,77 @@ def resolve_scene(raw: str) -> str:
     return "res://" + s
 
 
+def _resolve_reference(raw: str) -> Path:
+    """Путь референса в любом виде: имя в data/input, POSIX или D:\\...
+
+    Правило то же, что у фотографий в server.main._resolve_input, и код
+    повторён здесь намеренно: main импортирует этот модуль, общий импорт
+    дал бы цикл. Разъедутся - симптомом будет «фото открывается, референс
+    с тем же путём нет», лечится сверкой этих двух функций.
+    """
+    raw = (raw or "").strip().strip('"').strip("'")
+    searched: list[str] = []
+
+    m = re.match(r"^([A-Za-z]):[\\/](.*)$", raw)
+    if m:
+        p = Path(f"/mnt/{m.group(1).lower()}/{m.group(2).replace(chr(92), '/')}")
+        searched.append(str(p))
+        if p.is_file():
+            return p
+
+    p = Path(raw)
+    if p.is_absolute():
+        searched.append(str(p))
+        if p.is_file():
+            return p
+
+    for cand in (config.INPUT_DIR / raw, config.INPUT_DIR / p.name):
+        searched.append(str(cand))
+        if cand.is_file():
+            return cand
+
+    raise PipelineError(
+        "shot",
+        f"референс {raw!r} не найден",
+        hint=("искал: " + "; ".join(searched)
+              + ". Положи картинку в data/input или дай полный путь - "
+                "годится и windows-вид D:\\папка\\файл.jpg"),
+    )
+
+
+def _compose_with_reference(shot_path: Path, ref_path: Path, out_path: Path) -> None:
+    """Кадр и референс одной картинкой: сверху движок, снизу референс.
+
+    Вертикально, а не рядом: оба изображения широкие (кадр всегда 16:9), и
+    поставленные рядом они получили бы по половине ширины каждое - фактуру на
+    такой мелочи не сравнить. Максимальная сторона склейки ограничена 1568:
+    дальше зрение модели картинку всё равно ужимает, и слать больше - платить
+    контекстом за пиксели, которых никто не увидит.
+    """
+    from PIL import Image as PILImage
+
+    gap, max_side = 8, 1568
+    shot = PILImage.open(shot_path).convert("RGB")
+    ref = PILImage.open(ref_path).convert("RGB")
+
+    w = min(shot.width, ref.width, max_side)
+    shot = shot.resize((w, round(shot.height * w / shot.width)), PILImage.LANCZOS)
+    ref = ref.resize((w, round(ref.height * w / ref.width)), PILImage.LANCZOS)
+
+    total_h = shot.height + gap + ref.height
+    if total_h > max_side:
+        k = max_side / total_h
+        w = max(1, round(w * k))
+        shot = shot.resize((w, max(1, round(shot.height * k))), PILImage.LANCZOS)
+        ref = ref.resize((w, max(1, round(ref.height * k))), PILImage.LANCZOS)
+        total_h = shot.height + gap + ref.height
+
+    canvas = PILImage.new("RGB", (w, total_h), (24, 24, 24))
+    canvas.paste(shot, (0, 0))
+    canvas.paste(ref, (0, shot.height + gap))
+    canvas.save(out_path)
+
+
 def _errors(out: str) -> list[str]:
     found: list[str] = []
     keep_next = False
@@ -110,8 +186,12 @@ def _errors(out: str) -> list[str]:
 def shot_scene(scene: str = "main", views: int = 1, azimuth: float | None = None,
                elevation: float = 15.0, distance: float = 1.1,
                fov: float = 65.0, res: int = 1024,
-               unshaded: bool = False) -> dict[str, Any]:
+               unshaded: bool = False,
+               reference: str | None = None) -> dict[str, Any]:
     res_path = resolve_scene(scene)
+    # Референс проверяется ДО запуска движка: три секунды окна ради ошибки
+    # «файла нет» - это три секунды, потраченные на известный ответ.
+    ref_file = _resolve_reference(reference) if reference else None
     if not config.GODOT.exists():
         raise PipelineError(
             "shot", f"движок не найден: {config.GODOT}",
@@ -186,10 +266,21 @@ def shot_scene(scene: str = "main", views: int = 1, azimuth: float | None = None
             shots.append({"name": s["name"], "path": f, "spread": s.get("spread", 0)})
 
     blank = [s["name"] for s in shots if s["spread"] < 0.01]
+
+    if ref_file is not None:
+        # Клеится каждый кадр, а не только первый: ракурсы разные, а вопрос
+        # у всех один - похоже ли на эталон. Исходный кадр остаётся рядом.
+        for s in shots:
+            comp = out_dir / f"{s['name']}_vs_ref.png"
+            _compose_with_reference(s["path"], ref_file, comp)
+            s["raw_path"] = s["path"]
+            s["path"] = comp
+
     return {
         "scene": res_path,
         "shots": shots,
         "blank": blank,
+        "reference": str(ref_file) if ref_file else None,
         "stats": payload.get("stats", {}),
         "errors": errors,
         "elapsed_sec": round(time.time() - t0, 1),
@@ -211,6 +302,10 @@ def describe(r: dict[str, Any]) -> str:
     if r["blank"]:
         lines.append("ПУСТЫЕ КАДРЫ: " + ", ".join(r["blank"])
                      + " - камера смотрит мимо сцены или свет выключен")
+    if r.get("reference"):
+        lines.append(f"каждый кадр склеен с референсом {Path(r['reference']).name}: "
+                     "СВЕРХУ движок, СНИЗУ эталон. Своди тон, контраст и фактуру "
+                     "правками сцены - совпадения пиксель в пиксель не будет")
     if r["errors"]:
         lines.append("ошибки движка:")
         lines += ["  " + e for e in r["errors"]]
@@ -220,8 +315,9 @@ def describe(r: dict[str, Any]) -> str:
 def main() -> None:
     scene = sys.argv[1] if len(sys.argv) > 1 else "main"
     views = int(sys.argv[2]) if len(sys.argv) > 2 else 1
+    reference = sys.argv[3] if len(sys.argv) > 3 else None
     try:
-        r = shot_scene(scene, views=views)
+        r = shot_scene(scene, views=views, reference=reference)
     except PipelineError as e:
         print(str(e), file=sys.stderr)
         raise SystemExit(1) from None

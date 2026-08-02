@@ -22,6 +22,8 @@ import json
 import math
 import sys
 
+from pathlib import Path
+
 import bpy
 from mathutils import Vector
 
@@ -216,6 +218,116 @@ def _noise(nt, coord, scale, detail=6.0, loc=(-1100, 0), stretch=None):
     n.inputs["Detail"].default_value = detail
     nt.links.new(n.inputs["Vector"], src)
     return n
+
+
+
+# --------------------------------------------------------------------------- #
+# Фотосканные материалы
+# --------------------------------------------------------------------------- #
+
+TEX_DIR = Path("/mnt/d/Develop/photo3d/data/textures")
+
+
+def box_uv(obj, tile_m):
+    """Развёртка проекцией по осям, в МИРОВЫХ координатах.
+
+    Мировые, а не локальные - иначе стык двух объектов с одним материалом
+    показывает разрыв рисунка: у каждого своя нулевая точка. В коридоре стена
+    собрана из нескольких кусков, и шов был бы виден насквозь.
+
+    Считается руками, а не оператором uv.cube_project: операторам нужен
+    контекст окна, которого в фоновом Blender нет, и они падают или молча
+    ничего не делают - ровно тот случай, о котором предупреждает CLAUDE.md.
+    """
+    me = obj.data
+    uvl = me.uv_layers.get("scan") or me.uv_layers.new(name="scan")
+    mw = obj.matrix_world
+    for poly in me.polygons:
+        n = poly.normal
+        axis = max(range(3), key=lambda i: abs(n[i]))
+        for li in poly.loop_indices:
+            co = mw @ me.vertices[me.loops[li].vertex_index].co
+            if axis == 0:
+                u, v = co.y, co.z
+            elif axis == 1:
+                u, v = co.x, co.z
+            else:
+                u, v = co.x, co.y
+            uvl.data[li].uv = (u / tile_m, v / tile_m)
+
+
+def _tex(nt, mat_dir, short, colorspace, loc):
+    path = mat_dir / f"{short}.jpg"
+    if not path.exists():
+        return None
+    node = nt.nodes.new("ShaderNodeTexImage")
+    node.image = bpy.data.images.load(str(path), check_existing=True)
+    node.image.colorspace_settings.name = colorspace
+    node.location = loc
+    return node
+
+
+def mat_scanned(name, asset, tile_m, tint=None, rough_range=None):
+    """Материал из фотоскана: цвет, нормаль, шероховатость картинками.
+
+    Такой материал НЕ запекается (bake_scene узнаёт его и пропускает) и уезжает
+    в glTF со своим тайлингом. Отсюда и выигрыш: разрешение перестаёт упираться
+    в размер атласа на всю поверхность.
+
+    ТОНИРОВАТЬ ЗДЕСЬ НЕЛЬЗЯ, и параметр tint оставлен только затем, чтобы
+    сказать об этом вслух. Множитель между текстурой и входом Base Color
+    экспортёр glTF выбрасывает целиком: в файле не появляется ни baseColorFactor,
+    ни следа правки, а картинка уезжает исходного цвета. Проверено на файле -
+    baseColorFactor отсутствует. Та же семья, что и процедурные материалы:
+    формат знает Principled с картинками и константами, всё остальное молча
+    заменяет умолчанием.
+
+    Тон сцены сводится СВЕТОМ - цветом солнца и рассеянного света в .tscn,
+    где его видно и где он не теряется при экспорте.
+    """
+    if tint is not None:
+        raise SystemExit(
+            "CORRIDOR_ERROR tint в mat_scanned не работает: множитель между "
+            "текстурой и Base Color экспортёр glTF выбрасывает. Сводите тон "
+            "светом в сцене либо подберите скан нужного цвета")
+    mat, nt, bsdf, coord = _mat(name)
+    mat["tile_m"] = tile_m
+    d = TEX_DIR / asset
+    if not d.is_dir():
+        raise SystemExit(f"CORRIDOR_ERROR нет текстур {d}. "
+                         f"Прогони scripts/fetch_textures.py")
+
+    diff = _tex(nt, d, "diff", "sRGB", (-800, 300))
+    if tint is not None:
+        mul = nt.nodes.new("ShaderNodeMixRGB")
+        mul.location = (-450, 300)
+        mul.blend_type = "MULTIPLY"
+        mul.inputs["Fac"].default_value = 1.0
+        mul.inputs["Color2"].default_value = (*tint, 1)
+        nt.links.new(mul.inputs["Color1"], diff.outputs["Color"])
+        nt.links.new(bsdf.inputs["Base Color"], mul.outputs["Color"])
+    else:
+        nt.links.new(bsdf.inputs["Base Color"], diff.outputs["Color"])
+
+    rough = _tex(nt, d, "rough", "Non-Color", (-800, 0))
+    if rough is not None:
+        if rough_range is not None:
+            rng = nt.nodes.new("ShaderNodeMapRange")
+            rng.location = (-450, 0)
+            rng.inputs["To Min"].default_value = rough_range[0]
+            rng.inputs["To Max"].default_value = rough_range[1]
+            nt.links.new(rng.inputs["Value"], rough.outputs["Color"])
+            nt.links.new(bsdf.inputs["Roughness"], rng.outputs["Result"])
+        else:
+            nt.links.new(bsdf.inputs["Roughness"], rough.outputs["Color"])
+
+    nor = _tex(nt, d, "nor", "Non-Color", (-800, -300))
+    if nor is not None:
+        nm = nt.nodes.new("ShaderNodeNormalMap")
+        nm.location = (-450, -300)
+        nt.links.new(nm.inputs["Color"], nor.outputs["Color"])
+        nt.links.new(bsdf.inputs["Normal"], nm.outputs["Normal"])
+    return mat
 
 
 def mat_floor():
@@ -757,12 +869,21 @@ def main():
     scene = bpy.context.scene
 
     m = {
-        "floor": mat_floor(),
+        # Пол и стены - фотосканы, а не шум. Это две поверхности, занимающие
+        # почти весь кадр, и на них разница видна сразу: у скана есть история
+        # (сучки, стыки, потёртости в конкретных местах), а шум даёт лишь
+        # равномерную рябь. Тайлинг два и три метра, тон подогнан множителем.
+        "floor": mat_scanned("floor_wood", "brown_planks_09", 1.6,
+                             rough_range=(0.30, 0.70)),
         # Палитра сведена по референсу. Главная правка - стены: были насыщенно
         # синие, отчего коридор читался ночным. На референсе штукатурка светлая
         # и почти серая, а холод в кадр приносит НЕ краска, а свет в тени;
         # насыщенная стена спорит с этим и съедает тёплые пятна солнца.
-        "wall": mat_plaster("wall_plaster", (0.60, 0.61, 0.62), streaks=0.45),
+        # Скан бежевый. Тонировать его в шейдере бесполезно - множитель не
+        # переживает экспорт (см. mat_scanned), а холод в кадр всё равно
+        # приносит свет, а не краска.
+        "wall": mat_scanned("wall_plaster", "beige_wall_001", 3.0,
+                            rough_range=(0.75, 0.95)),
         "ceil": mat_plaster("ceiling_plaster", (0.30, 0.32, 0.37), streaks=0.25),
         "locker": mat_metal("locker_metal", (0.38, 0.40, 0.37)),
         "handle": mat_metal("handle_metal", (0.62, 0.63, 0.60), 0.30, 0.9),
@@ -778,6 +899,20 @@ def main():
     doors = build_lockers(m)
     build_doors(m)
     build_props(m)
+
+    # Развёртка под фотосканы. Делается ПОСЛЕ всей геометрии: булевы вырезы
+    # окон и дверей меняют сетку, и развёртка, построенная до них, на новых
+    # гранях просто отсутствовала бы.
+    scanned = 0
+    for obj in scene.objects:
+        if obj.type != "MESH":
+            continue
+        tiles = [sl.material["tile_m"] for sl in obj.material_slots
+                 if sl.material is not None and "tile_m" in sl.material]
+        if tiles:
+            box_uv(obj, tiles[0])
+            scanned += 1
+    print(f"CORRIDOR_UV объектов с фотосканной развёрткой: {scanned}")
 
     d = setup_light(scene, args, glass)
     cam = setup_camera(scene, args)
