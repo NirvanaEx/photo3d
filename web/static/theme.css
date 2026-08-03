@@ -274,6 +274,8 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; }
    читается как «поломалось», а погашенная — как «сейчас нельзя».
    Так выключается 3D, когда не поднялся WebGL (app.js). */
 .seg > button[disabled] { opacity: .35; pointer-events: none; }
+/* Счётчик внутри кнопки переключателя: сколько попадёт под этот отбор. */
+.seg > button b { font-family: var(--mono); font-weight: 500; opacity: .7; }
 
 /* --------------------------------------------------------------- поля */
 

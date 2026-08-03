@@ -93,6 +93,10 @@
                  placeholder="поиск по имени, id или исходнику">
         </div>
         <div class="chips" id="engine-chips"></div>
+        <!-- Отбор по игре. Ось отдельная от движка: движок — чем сделано,
+             игра — дошло ли до дела. Рисуется из nav.js вместе со счётчиками
+             и прячется целиком, когда в игру не уехало ничего. -->
+        <div class="seg" id="game-filter" hidden></div>
         <span class="spacer"></span>
         <label class="pick-sort">
           <i data-icon="sort" data-icon-class="icon-sm"></i>

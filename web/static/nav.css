@@ -264,6 +264,27 @@ kbd {
 }
 .gstar .icon { fill: currentColor; stroke: none; }
 
+/* Метка «уехала в игру». Правый верхний угол — единственный свободный:
+   слева вверху флажок выбора, слева внизу движок, справа внизу звезда.
+   Приглушённый вид (idle) означает «импортирована, но ни в одной сцене» —
+   состояние, которое иначе не увидеть ниоткуда: в библиотеке такая модель
+   выглядит обычной, а в лаунчере её нет вовсе. */
+.ggame {
+  position: absolute; right: var(--sp-3); top: var(--sp-3);
+  display: grid; place-items: center; width: 20px; height: 20px;
+  border-radius: var(--r-1);
+  background: rgba(12, 13, 16, .82); border: 1px solid var(--ok-line);
+  color: var(--ok); backdrop-filter: blur(3px);
+}
+.ggame.idle { border-color: var(--line); color: var(--text-3); }
+
+.gline.game {
+  display: flex; align-items: center; gap: 5px;
+  color: var(--ok);
+}
+.gline.game .icon { flex: 0 0 auto; }
+.gline.game.idle { color: var(--text-3); }
+
 /* Флажок выбора виден всегда, а не по наведению: иначе о множественном
    выборе не догадаться, а именно он и нужен, когда чистишь два десятка
    почти одинаковых попыток. */

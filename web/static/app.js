@@ -53,6 +53,52 @@ function fmtAgo(ts) {
   return `${Math.round(s / 86400)} дн назад`;
 }
 
+// Свой экранировщик: тот, что в nav.js, лежит внутри IIFE и сюда не виден.
+// Нужен потому, что названия сцен пишет человек руками в
+// game/scenes/games.json — в отличие от meta.json, где значения кладёт
+// пайплайн, и от id, который проверен шаблоном.
+const escHtml = (s) => String(s ?? "").replace(/[&<>"']/g,
+  (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+// Строки инспектора про игру. Поле game приходит с сервера
+// (web/game_link.py) и есть только у моделей, чей GLB уехал в game/assets.
+//
+// Габариты здесь важнее, чем кажется: генератор нормирует всё в единичный
+// куб, масштаба в фотографии нет, и «влезет ли предмет в комнату» по
+// полигонам и мегабайтам не понять вовсе. Это единственное место в
+// интерфейсе, где размер модели указан в метрах.
+function gameRows(m) {
+  const g = m.game;
+  if (!g) return "";
+
+  const rows = [];
+  rows.push(`<span class="meta-sep">в игре</span>`);
+
+  rows.push(g.scenes.length
+    ? `<span><span class="k">сцены</span> <span class="v">${
+        g.scenes.map((s) => escHtml(s.title)).join(", ")}</span></span>`
+    // Импортирована и забыта - состояние, которое иначе не увидеть ниоткуда:
+    // в библиотеке модель выглядит обычной, в лаунчере её нет вовсе.
+    : `<span><span class="k">сцены</span> <span class="v bad">ни одной</span></span>`);
+
+  if (g.size) {
+    rows.push(`<span><span class="k">габариты</span> <span class="v">${
+      g.size.map((v) => v.toFixed(1)).join(" × ")} м</span></span>`);
+  }
+  // Число треугольников показывается только у облегчённого варианта: у
+  // исходного оно совпадает с «полигонами» выше, и вторая такая же строка
+  // читалась бы как расхождение там, где его нет.
+  if (g.gameready && g.triangles) {
+    rows.push(`<span><span class="k">в сцене</span> <span class="v">${
+      fmtNum(g.triangles)} тр.</span></span>`);
+  }
+  if (g.at) {
+    rows.push(`<span><span class="k">перенесена</span> <span class="v">${
+      fmtAgo(g.at)}</span></span>`);
+  }
+  return rows.join("\n    ");
+}
+
 // Равномерная выборка: кадров полного оборота два десятка, в полосе
 // столько миниатюр не нужно.
 function sample(arr, n) {
@@ -156,6 +202,7 @@ function select(id) {
     <span><span class="k">оболочка</span> ${wt}</span>
     <span><span class="k">время</span> <span class="v">${m.elapsed} с</span></span>
     <span><span class="k">размер</span> <span class="v">${fmtBytes(m.glb_size)}</span></span>
+    ${gameRows(m)}
     <span><a href="/files/${m.id}/model.glb" download>${
       icon("download", "icon-sm")}скачать GLB</a></span>`;
 

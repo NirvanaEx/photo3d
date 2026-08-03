@@ -260,6 +260,19 @@ model-viewer:not([src]) { visibility: hidden; }
   overflow: hidden; text-overflow: ellipsis;
 }
 .meta .v.bad { color: var(--warn); }
+
+/* Подзаголовок внутри списка свойств. Отдельной группой «В игре» это не
+   сделано нарочно: свойства всё те же, модели, и разрывать список ради
+   четырёх строк значило бы дважды прокручивать инспектор вместо одного
+   взгляда. */
+.meta .meta-sep {
+  justify-content: flex-start; gap: var(--sp-4);
+  margin-top: var(--sp-5); padding-bottom: 3px;
+  border-bottom-color: var(--line-2);
+  font-size: var(--t-label); text-transform: uppercase; letter-spacing: .07em;
+  color: var(--text-3);
+}
+.meta .meta-sep::after { content: ""; flex: 1 1 auto; }
 /* Ссылка на скачивание — единственное действие среди свойств, поэтому
    выглядит кнопкой, а не подчёркнутым текстом в ряду цифр. */
 .meta a {

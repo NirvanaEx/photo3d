@@ -37,7 +37,7 @@ from server import config, jobs
 from server.errors import PipelineError
 from server.store import ModelStore
 
-from . import library
+from . import game_link, library
 
 mimetypes.add_type("model/gltf-binary", ".glb")
 
@@ -176,6 +176,14 @@ def _models() -> list[dict]:
             children.setdefault(p, []).append(m["id"])
     for m in out:
         m["children"] = children.get(m["id"], [])
+
+    # Что уехало в игру. Здесь, а не в _payload, по той же причине, что и
+    # связи выше: карточка кэшируется по отпечатку СВОЕЙ папки, а модель
+    # попадает в сцену правкой чужого файла в game/ - папка модели при этом
+    # не меняется, и метка в кэше застыла бы навсегда.
+    linked = game_link.state()
+    for m in out:
+        m["game"] = linked.get(m["id"])
     return out
 
 
@@ -210,6 +218,12 @@ def _signature() -> str:
     # переписывает его файл на каждом этапе. Свой отпечаток она считает сама
     # (server/jobs.py) - одним stat на задание, как и модели здесь.
     parts.append(jobs.stamp())
+
+    # Игровая часть: импортированные ассеты и сцены, которые их держат.
+    # Меняется реже всего остального, но входит в отпечаток на общих
+    # основаниях - иначе метка «в игре» появлялась бы в карточке только
+    # после следующей генерации.
+    parts.append(game_link.stamp())
     return "|".join(parts)
 
 

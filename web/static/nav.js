@@ -48,6 +48,11 @@ const nav = {
   route: { name: "home", id: null },
   q: "",
   engine: "",
+  // Отбор по игре: "" — все, "in" — стоит хотя бы в одной сцене, "out" —
+  // ни в одной. Ось отдельная от движка нарочно: движок это чем сделано,
+  // а игра — дошло ли до дела, и складывать их в один ряд фишек значило бы
+  // сделать невозможным «trellis2, которые ещё не в сцене».
+  game: "",
   sort: "new",
   sel: new Set(),
   jobs: [],
@@ -466,6 +471,8 @@ function visibleModels() {
   const q = nav.q.trim().toLowerCase();
   let list = nav.models.filter((m) => {
     if (nav.engine && (m.engine || "без движка") !== nav.engine) return false;
+    if (nav.game === "in" && !inScene(m)) return false;
+    if (nav.game === "out" && inScene(m)) return false;
     if (!q) return true;
     return [m.id, m.title, m.origin, m.engine, m.mode]
       .some((v) => String(v ?? "").toLowerCase().includes(q));
@@ -515,6 +522,58 @@ function renderChips() {
   for (const [e, n] of engineList()) mk(e, e, n);
 }
 
+// Отбор по игре. Прячется целиком, когда в игру не уехало ничего: полоса
+// с тремя кнопками, из которых две всегда дают пусто, только сбивает с
+// толку - то же правило, по которому прячется полоса действий над выбранным.
+function renderGameFilter() {
+  const box = $("game-filter");
+  const total = nav.models.length;
+  const inN = nav.models.filter(inScene).length;
+  const known = nav.models.some((m) => m.game);
+  box.hidden = !known;
+  if (!known) { nav.game = ""; return; }
+
+  box.innerHTML = "";
+  const opts = [
+    ["", "все", "Вся библиотека", total],
+    ["in", "в игре", "Стоит хотя бы в одной сцене Godot", inN],
+    ["out", "не в игре", "Ни в одной сцене — считая импортированные и забытые",
+     total - inN],
+  ];
+  for (const [val, label, title, n] of opts) {
+    const b = el("button", nav.game === val ? "active" : "",
+                 `${esc(label)} <b>${n}</b>`);
+    b.title = title;
+    b.onclick = () => { nav.game = val; renderHome(); };
+    box.appendChild(b);
+  }
+}
+
+// ------------------------------------------------------------ связь с игрой
+
+// Поле game приходит с сервера (web/game_link.py) и есть только у тех
+// моделей, чей GLB уехал в game/assets. Различаются два состояния, и это
+// не педантизм: «импортирована» и «стоит в сцене» — разные ответы на вопрос
+// «сделано ли с ней что-нибудь». Модель, доехавшую до проекта и забытую,
+// иначе не отличить от работающей.
+const inScene = (m) => !!(m.game && m.game.scenes.length);
+
+function gameMark(m) {
+  if (!m.game) return "";
+  const where = inScene(m)
+    ? "в сцене: " + m.game.scenes.map((s) => s.title).join(", ")
+    : "импортирована в игру, но ни в одной сцене не стоит";
+  return `<span class="ggame${inScene(m) ? "" : " idle"}" title="${esc(where)}">` +
+         icon("scene", "icon-sm") + `</span>`;
+}
+
+function gameLine(m) {
+  if (!m.game) return "";
+  if (!inScene(m)) return `<div class="gline game idle">импортирована, но не в сцене</div>`;
+  return `<div class="gline game">${icon("scene", "icon-sm")}` +
+         esc(m.game.scenes.map((s) => s.title).join(" · ")) + `</div>`;
+}
+
 function card(m, { trashed = false } = {}) {
   const c = el("div", "gcard" + (nav.sel.has(m.id) ? " picked" : "") +
                       (m.star ? " starred" : ""));
@@ -538,6 +597,7 @@ function card(m, { trashed = false } = {}) {
       (trashed ? "" : `<label class="pick"><input type="checkbox" ${
         nav.sel.has(m.id) ? "checked" : ""}></label>`) +
       (m.engine ? `<span class="gbadge">${esc(m.engine)}</span>` : "") +
+      (!trashed ? gameMark(m) : "") +
       (m.star && !trashed ? `<span class="gstar">${icon("star", "icon-sm")}</span>` : "") +
     `</div>` +
     `<div class="gbody">` +
@@ -546,6 +606,7 @@ function card(m, { trashed = false } = {}) {
       `<div class="gsub dim">${trashed
         ? "удалена " + fmtAgo(m.deleted_at)
         : fmtAgo(m.updated)}${m.fresh && !trashed ? ' <span class="hot">в работе</span>' : ""}</div>` +
+      (!trashed ? gameLine(m) : "") +
       (lineage.length ? `<div class="gline">${lineage.join(" · ")}</div>` : "") +
     `</div>` +
     `<div class="gacts"></div>`;
@@ -590,6 +651,7 @@ function card(m, { trashed = false } = {}) {
 function renderHome() {
   renderTiles();
   renderChips();
+  renderGameFilter();
   $("q").value = nav.q;
   $("sort").value = nav.sort;
 
