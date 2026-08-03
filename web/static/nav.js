@@ -50,6 +50,7 @@ const nav = {
   engine: "",
   sort: "new",
   sel: new Set(),
+  jobs: [],
   ready: false,
   // Чей ракурс сейчас во вьюере. Держим сами, а не подсматриваем в app.js:
   // там это `const state`, а объявленный так const в область window не
@@ -71,7 +72,11 @@ const nameOf = (m) => (m && (m.title || m.id)) || "—";
 const SECTIONS = [
   {
     id: "home",
-    icon: "▦",
+    // Значок — готовая строка <svg> из icons.js. Раньше здесь стоял
+    // юникод-глиф, и ряд разделов не выстраивался: у ▦, ◈, ＋ и ⌫ разная
+    // ширина и разная базовая линия, потому что каждый приходит из своего
+    // системного шрифта.
+    icon: icon("library"),
     label: "Главная",
     hash: "#/",
     view: "view-home",
@@ -81,7 +86,7 @@ const SECTIONS = [
   },
   {
     id: "viewer",
-    icon: "◈",
+    icon: icon("cube"),
     label: "Просмотр",
     hash: "#/m/",
     view: "view-viewer",
@@ -92,8 +97,23 @@ const SECTIONS = [
     render: renderViewerRoute,
   },
   {
+    id: "create",
+    icon: icon("plus"),
+    label: "Создать",
+    hash: "#/new",
+    view: "view-create",
+    crumbs: () => "Создать модель",
+    // Значок считает то, что сейчас в работе, а не все задания подряд:
+    // цифра рядом с пунктом должна означать «идёт прямо сейчас».
+    badge: () => nav.jobs.filter(
+      (j) => j.state === "queued" || j.state === "running").length,
+    // Отрисовка живёт в create.js: там же загрузка, разбор кадра и очередь.
+    // Здесь только запись в реестре - ради этого он и заведён.
+    render: () => window.photo3dCreate && window.photo3dCreate.render(),
+  },
+  {
     id: "trash",
-    icon: "⌫",
+    icon: icon("trash"),
     label: "Корзина",
     hash: "#/trash",
     view: "view-trash",
@@ -112,6 +132,7 @@ function parseHash() {
   const m = h.match(/^#\/m\/([a-z0-9_]+)/i);
   if (m) return { name: "viewer", id: m[1] };
   if (h.startsWith("#/trash")) return { name: "trash", id: null };
+  if (h.startsWith("#/new")) return { name: "create", id: null };
   return { name: "home", id: null };
 }
 
@@ -501,7 +522,7 @@ function card(m, { trashed = false } = {}) {
   const base = trashed ? "trash-files" : "files";
   const thumb = m.views.length
     ? `<img loading="lazy" src="/${base}/${m.id}/views/${m.views[0]}?v=${m.updated}" alt="">`
-    : `<div class="no-thumb">◇</div>`;
+    : `<div class="no-thumb">${icon("cube", "icon-xl")}</div>`;
 
   const lineage = [];
   if (m.parents && m.parents.length) {
@@ -517,7 +538,7 @@ function card(m, { trashed = false } = {}) {
       (trashed ? "" : `<label class="pick"><input type="checkbox" ${
         nav.sel.has(m.id) ? "checked" : ""}></label>`) +
       (m.engine ? `<span class="gbadge">${esc(m.engine)}</span>` : "") +
-      (m.star && !trashed ? `<span class="gstar">★</span>` : "") +
+      (m.star && !trashed ? `<span class="gstar">${icon("star", "icon-sm")}</span>` : "") +
     `</div>` +
     `<div class="gbody">` +
       `<div class="gname" title="${esc(m.id)}">${esc(nameOf(m))}</div>` +
@@ -537,15 +558,22 @@ function card(m, { trashed = false } = {}) {
     acts.appendChild(b);
   };
 
+  // Со значком идут только действия, у которых он однозначен: звезда,
+  // переименование, повтор, удаление. «Открыть» остаётся словом — это
+  // главное действие карточки, и читаться оно должно без расшифровки
+  // картинки.
+  const ico = (name) => icon(name, "icon-sm");
+
   if (trashed) {
-    btn("вернуть", "Вернуть в библиотеку", () => doRestore(m));
-    btn("стереть", "Удалить окончательно", () => doPurge(m), "danger");
+    btn(ico("restore") + "вернуть", "Вернуть в библиотеку", () => doRestore(m));
+    btn(ico("close") + "стереть", "Удалить окончательно", () => doPurge(m), "danger");
   } else {
     btn("открыть", "Открыть в просмотре", () => go("#/m/" + m.id));
-    btn(m.star ? "★" : "☆", "Отметить", () => toggleStar(m), "icon");
-    btn("имя", "Переименовать", () => doRename(m), "icon-wide");
-    btn("переделать", "Собрать команду для повторной генерации", () => doRedo(m));
-    btn("удалить", "Убрать в корзину", () => doDelete([m.id]), "danger");
+    btn(ico("star"), m.star ? "Снять отметку" : "Отметить",
+        () => toggleStar(m), "icon" + (m.star ? " on" : ""));
+    btn(ico("rename"), "Переименовать", () => doRename(m), "icon");
+    btn(ico("redo"), "Собрать команду для повторной генерации", () => doRedo(m), "icon");
+    btn(ico("trash"), "Убрать в корзину", () => doDelete([m.id]), "icon danger");
   }
 
   if (!trashed) {
@@ -649,11 +677,13 @@ function renderPanelActions(m) {
     b.onclick = fn;
     bar.appendChild(b);
   };
-  btn(m.star ? "★ отмечена" : "☆ отметить", () => toggleStar(m));
-  btn("переименовать", () => doRename(m));
-  btn("переделать", () => doRedo(m));
-  btn("удалить", () => doDelete([m.id]), "danger");
-  btn("к списку", () => go("#/"));
+  const ico = (name) => icon(name, "icon-sm");
+  btn(ico("star") + (m.star ? "отмечена" : "отметить"), () => toggleStar(m),
+      m.star ? "starred" : "");
+  btn(ico("rename") + "переименовать", () => doRename(m));
+  btn(ico("redo") + "переделать", () => doRedo(m));
+  btn(ico("trash") + "удалить", () => doDelete([m.id]), "danger");
+  btn(ico("chevron-left") + "к списку", () => go("#/"));
 }
 
 // ------------------------------------------------------------- состояние
@@ -661,6 +691,7 @@ function renderPanelActions(m) {
 function onState(d) {
   nav.models = d.models || [];
   nav.trash = d.trash || [];
+  nav.jobs = d.jobs || [];
   nav.ready = true;
 
   // Выбор чистим от исчезнувшего: иначе «удалить выбранные» считало бы
@@ -704,6 +735,15 @@ window.select = function (id) {
 
 window.addEventListener("photo3d:state", (e) => onState(e.detail));
 window.addEventListener("hashchange", applyRoute);
+
+// Сообщения и обновление для create.js. Он лежит отдельным файлом и в наши
+// внутренности не лезет: просит событием, показываем мы. Двух систем
+// всплывающих сообщений с разным видом в интерфейсе быть не должно.
+window.addEventListener("photo3d:toast", (e) => {
+  const d = e.detail || {};
+  toast(d.text, d.kind, d.ms);
+});
+window.addEventListener("photo3d:refresh", () => refresh());
 
 // «Следить за новыми» ведёт себя как раньше - открывает свежую модель, -
 // но только когда мы и так в просмотре. Утаскивать с главной посреди

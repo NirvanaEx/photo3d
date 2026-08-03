@@ -4,13 +4,29 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>photo3d</title>
+
+<!-- Манифест приложения. С ним Edge и Chrome предлагают «Установить
+     photo3d»: интерфейс получает своё окно без адресной строки, иконку и
+     пункт в меню Пуск, оставаясь при этом обычной страницей по тому же
+     адресу. Установка доступна только на localhost или по https - обычный
+     http-адрес браузер приложением ставить откажется. -->
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#191b1f">
+<link rel="icon" href="/static/icons/photo3d.ico" sizes="any">
+<link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+
+<!-- Порядок таблиц значим. theme.css идёт первым: он держит токены (цвета,
+     кегли, скругления, высоты элементов) и примитивы (кнопка, поле,
+     сегментный переключатель, заголовок дока). Остальные три - разделы,
+     и они только пользуются токенами, своей палитры не заводят.
+     Разделение по файлам сохранено потому же, почему заведено: над вьюером
+     и над библиотекой работают параллельно, и раздельные файлы правятся,
+     не задевая друг друга. -->
+<link rel="stylesheet" href="/static/theme.css">
 <link rel="stylesheet" href="/static/style.css">
-<!-- Навигация, главная и корзина держатся в отдельной паре файлов, а не
-     дописаны в style.css и app.js. Причина не в чистоте, а в том, что над
-     вьюером работают параллельно: раздельные файлы правятся, не задевая
-     друг друга. -->
 <link rel="stylesheet" href="/static/nav.css">
 <link rel="stylesheet" href="/static/walk.css">
+<link rel="stylesheet" href="/static/create.css">
 
 <!-- Карта импортов. Нужна потому, что аддоны three (PointerLockControls,
      GLTFLoader, Octree) написаны как ES-модули и импортируют голое имя
@@ -30,28 +46,28 @@
 </head>
 <body>
 
-<!-- Панель навигации. Пункты рисуются из реестра в nav.js, а не лежат здесь
+<!-- Панель разделов. Пункты рисуются из реестра в nav.js, а не лежат здесь
      разметкой: добавить раздел должно быть одной записью в массиве, а не
      правкой в трёх местах. -->
 <nav id="rail">
   <div class="brand">
-    <span class="logo">◆</span>
-    <span>photo3d</span>
+    <span class="logo"><i data-icon="cube" data-icon-class="icon-lg"></i></span>
+    <span class="brand-name">photo3d</span>
+    <button id="rail-toggle" class="rail-toggle" title="Свернуть панель разделов">
+      <i data-icon="panel"></i>
+    </button>
   </div>
   <div id="nav"></div>
-  <div class="rail-foot">
-    <div class="rail-stat"><span>моделей</span><b id="stat-count">—</b></div>
-    <div class="rail-stat"><span>на диске</span><b id="stat-size">—</b></div>
-    <div class="live" id="live" data-state="connecting">
-      <span class="dot"></span><span class="live-text">подключение…</span>
-    </div>
-  </div>
 </nav>
 
 <div id="content">
 
-<header>
+<!-- Верхняя панель. Слева - где мы находимся, справа - переключатели,
+     относящиеся к текущему разделу. Действия над открытой моделью живут
+     не здесь, а в инспекторе: там же, где её свойства. -->
+<header id="appbar">
   <div class="crumbs" id="crumbs"></div>
+  <span class="spacer"></span>
   <div class="head-right">
     <label class="toggle" id="follow-wrap">
       <input type="checkbox" id="follow" checked>
@@ -67,17 +83,27 @@
     <div class="scroll">
       <div class="tiles" id="tiles"></div>
 
+      <!-- Строка отбора липнет к верху при прокрутке: список моделей длинный,
+           и уехавший вверх поиск заставляет мотать обратно ради каждой
+           смены фильтра. -->
       <div class="toolbar">
-        <input type="search" id="q" autocomplete="off"
-               placeholder="поиск по имени, id или исходнику">
+        <div class="search">
+          <i data-icon="search" data-icon-class="icon-sm"></i>
+          <input type="search" id="q" autocomplete="off"
+                 placeholder="поиск по имени, id или исходнику">
+        </div>
         <div class="chips" id="engine-chips"></div>
-        <select id="sort" title="Порядок">
-          <option value="new">сначала свежие</option>
-          <option value="old">сначала старые</option>
-          <option value="big">сначала тяжёлые</option>
-          <option value="faces">больше полигонов</option>
-          <option value="name">по имени</option>
-        </select>
+        <span class="spacer"></span>
+        <label class="pick-sort">
+          <i data-icon="sort" data-icon-class="icon-sm"></i>
+          <select id="sort" title="Порядок">
+            <option value="new">сначала свежие</option>
+            <option value="old">сначала старые</option>
+            <option value="big">сначала тяжёлые</option>
+            <option value="faces">больше полигонов</option>
+            <option value="name">по имени</option>
+          </select>
+        </label>
       </div>
 
       <!-- Полоса действий над выбранными. Появляется, только когда есть что
@@ -95,10 +121,17 @@
   </section>
 
   <!-- ---------------------------------------------------------- просмотр -->
+  <!-- Три дока в ряд, как в редакторе: слева список объектов, в середине
+       вьюпорт, справа инспектор со свойствами выбранного. Границы между
+       ними тянутся мышью (shell.js), ширины запоминаются. -->
   <section class="view" id="view-viewer" hidden>
+
   <aside id="sidebar">
-    <div class="aside-head">
-      <span>Модели</span><span class="count" id="count">—</span>
+    <div class="dock-head">
+      <i data-icon="library" data-icon-class="icon-sm"></i>
+      <span>Модели</span>
+      <span class="spacer"></span>
+      <span class="num" id="count">—</span>
     </div>
     <div id="list"></div>
     <div class="empty" id="empty">
@@ -106,13 +139,47 @@
     </div>
   </aside>
 
+  <div class="dock-split" data-split="sidebar" title="Потянуть, чтобы изменить ширину"></div>
+
   <section id="stage">
     <div id="viewer-wrap">
 
-      <div class="mode-tabs">
-        <button class="mode active" data-mode="3d">3D</button>
-        <button class="mode" data-mode="spin">Турнтейбл</button>
-        <button class="mode" data-mode="walk">Прогулка</button>
+      <!-- Верхний ряд вьюпорта. Слева режим показа, справа инструменты
+           камеры и сцены — разбитые на группы разделителями: без них
+           семь одинаковых кнопок читаются как один неразличимый блок. -->
+      <div class="vp-bar vp-bar-left">
+        <div class="seg mode-tabs">
+          <button class="mode active" data-mode="3d" title="3D: живой GLB, орбита мышью">
+            <i data-icon="cube" data-icon-class="icon-sm"></i><span>3D</span>
+          </button>
+          <button class="mode" data-mode="spin" title="Турнтейбл: вращение по готовым кадрам">
+            <i data-icon="rotate" data-icon-class="icon-sm"></i><span>Турнтейбл</span>
+          </button>
+          <button class="mode" data-mode="walk" title="Прогулка: ходьба по сцене от первого лица">
+            <i data-icon="walk" data-icon-class="icon-sm"></i><span>Прогулка</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="vp-bar vp-bar-right">
+        <div class="viewer-tools">
+          <button id="btn-zoom-in" class="tool" title="Приблизить (колесо мыши)">
+            <i data-icon="zoom-in"></i></button>
+          <button id="btn-zoom-out" class="tool" title="Отдалить (колесо мыши)">
+            <i data-icon="zoom-out"></i></button>
+          <button id="btn-reset" class="tool" title="Сбросить вид (двойной клик)">
+            <i data-icon="target"></i></button>
+          <span class="sep"></span>
+          <button id="btn-fly" class="tool" title="Свободная камера: WASD и мышь (клавиша C)">
+            <i data-icon="fly"></i></button>
+          <button id="btn-rotate" class="tool" title="Автовращение">
+            <i data-icon="rotate"></i></button>
+          <span class="sep"></span>
+          <button id="btn-scene" class="tool" title="Студийный фон и тень">
+            <i data-icon="light"></i></button>
+          <button id="btn-full" class="tool" title="Во весь экран">
+            <i data-icon="maximize"></i></button>
+        </div>
       </div>
 
       <!-- Подложка рисуется средствами CSS, а не геометрией: model-viewer
@@ -160,19 +227,41 @@
         <canvas id="walk-canvas"></canvas>
         <div id="walk-cross"></div>
         <div id="walk-lock">
-          <div>
+          <div class="lock-card">
+            <i data-icon="walk" data-icon-class="icon-xl"></i>
             <b>Кликни, чтобы взять управление</b>
-            <span>WASD — идти · мышь — смотреть · Space — прыжок
-              · Shift — бежать · Esc — отпустить мышь</span>
+            <span class="keys">
+              <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> идти
+              · <kbd>мышь</kbd> смотреть
+              · <kbd>Space</kbd> прыжок
+              · <kbd>Shift</kbd> бежать
+              · <kbd>Esc</kbd> отпустить
+            </span>
           </div>
         </div>
+
+        <!-- Отладочная панель. Заготовка dev-панели: сюда добавляются
+             показатели состояния, а не только положение камеры. -->
         <div id="walk-stats">
+          <div class="hud-head">отладка</div>
           <div><span>позиция</span><b id="walk-pos">—</b></div>
           <div><span>скорость</span><b id="walk-speed">—</b></div>
           <div><span>опора</span><b id="walk-floor">—</b></div>
           <div><span>кадров/с</span><b id="walk-fps">—</b></div>
           <div><span>модель</span><b id="walk-model">—</b></div>
           <div><span>коллайдер</span><b id="walk-collider">—</b></div>
+          <!-- Масштаб. Генератор нормирует всё в единичный куб, поэтому
+               комната приезжает размером с табурет: масштаба в фотографии
+               нет. Подбирается глазами прямо на ходу и запоминается в
+               ui.json — второй раз крутить не придётся. -->
+          <div id="walk-scale-row">
+            <div><span>масштаб</span><b id="walk-scale-val">×1</b></div>
+            <div class="walk-scale-ctl">
+              <input type="range" id="walk-scale" min="0" max="1000" value="500"
+                     title="Во сколько раз увеличить модель">
+              <button id="walk-scale-reset" title="Вернуть исходный размер">1:1</button>
+            </div>
+          </div>
           <div id="walk-note"></div>
         </div>
         <div id="walk-error" hidden></div>
@@ -186,29 +275,112 @@
            без метки в центре непонятно, куда полетишь по W. -->
       <div id="fly-cross" hidden></div>
       <div id="fly-hud" hidden>
-        <span><b>WASD</b> лететь · <b>мышь</b> смотреть · <b>Q/E</b> вниз-вверх
-          · <b>Shift</b> быстрее · <b>колесо</b> скорость · <b>Esc</b> выход</span>
+        <span class="keys">
+          <kbd>WASD</kbd> лететь · <kbd>мышь</kbd> смотреть · <kbd>Q</kbd><kbd>E</kbd> вниз-вверх
+          · <kbd>Shift</kbd> быстрее · <kbd>колесо</kbd> скорость · <kbd>Esc</kbd> выход
+        </span>
         <span class="fly-speed" id="fly-speed"></span>
         <span class="fly-warn" id="fly-warn" hidden>дальше модель уйдёт за дальнюю плоскость</span>
       </div>
-
-      <div class="viewer-tools">
-        <button id="btn-zoom-in" class="tool" title="Приблизить (колесо мыши)">+</button>
-        <button id="btn-zoom-out" class="tool" title="Отдалить (колесо мыши)">−</button>
-        <button id="btn-reset" class="tool" title="Сбросить вид (двойной клик)">⌖</button>
-        <button id="btn-fly" class="tool" title="Свободная камера: WASD и мышь (клавиша C)">✥</button>
-        <button id="btn-rotate" class="tool" title="Автовращение">⟳</button>
-        <button id="btn-scene" class="tool" title="Студийный фон и тень">◐</button>
-        <button id="btn-full" class="tool" title="Во весь экран">⛶</button>
-      </div>
-    </div>
-
-    <div id="panel">
-      <div id="meta" class="meta"></div>
-      <div class="strip-head">Ракурсы и исходник</div>
-      <div id="strip" class="strip"></div>
     </div>
   </section>
+
+  <div class="dock-split" data-split="inspector" title="Потянуть, чтобы изменить ширину"></div>
+
+  <!-- Инспектор. Свойства открытой модели и её кадры. Действия над моделью
+       вставляет сюда nav.js (renderPanelActions) первым потомком #panel —
+       поэтому #panel сохранён как есть. -->
+  <aside id="inspector">
+    <div class="dock-head">
+      <i data-icon="cube" data-icon-class="icon-sm"></i>
+      <span>Инспектор</span>
+    </div>
+    <div class="insp-scroll">
+      <div id="panel">
+        <div class="group-head gh-model">Модель</div>
+        <div id="meta" class="meta"></div>
+        <div class="group-head gh-views">Ракурсы и исходник</div>
+        <div id="strip" class="strip"></div>
+      </div>
+    </div>
+  </aside>
+
+  </section>
+
+  <!-- ---------------------------------------------------------- создание -->
+  <!-- Кнопка «сделать» для человека. Страница ничего не считает: она кладёт
+       задание в очередь, а исполняет воркер (см. README, «Очередь заданий»).
+       Поэтому вкладку можно закрыть посреди генерации. -->
+  <section class="view" id="view-create" hidden>
+    <div class="scroll">
+      <div class="cr-grid">
+
+        <div class="cr-col">
+          <div class="cr-step"><span class="cr-num">1</span>кадр</div>
+          <div class="cr-drop" id="cr-drop">
+            <input type="file" id="cr-file" accept="image/*" multiple hidden>
+            <i data-icon="image" data-icon-class="icon-xl"></i>
+            <div>Перетащи фото сюда</div>
+            <div class="dim">или нажми, чтобы выбрать · можно вставить из буфера</div>
+          </div>
+
+          <div class="cr-picked" id="cr-picked" hidden>
+            <img id="cr-thumb" alt="">
+            <div>
+              <div class="cr-name" id="cr-name"></div>
+              <div class="dim">лежит в data/input</div>
+            </div>
+          </div>
+
+          <div class="cr-step"><span class="cr-num">2</span>проверка</div>
+          <div class="cr-actions">
+            <button class="btn" id="cr-check" disabled>
+              <i data-icon="check" data-icon-class="icon-sm"></i>проверить кадр
+            </button>
+            <span class="dim">секунда процессора против четырёх минут видеокарты</span>
+          </div>
+
+          <div class="cr-report" id="cr-report" hidden>
+            <img id="cr-silhouette" alt="силуэт, который уйдёт в генератор">
+            <div class="cr-measures" id="cr-measures"></div>
+            <div class="cr-warns" id="cr-warns"></div>
+          </div>
+
+          <div class="cr-step"><span class="cr-num">3</span>генерация</div>
+          <div class="cr-form">
+            <label>режим
+              <select id="cr-mode">
+                <option value="draft">черновик · ~2 мин, форма видна, текстура грубая</option>
+                <option value="fast" selected>обычный · ~4.5 мин, текстура 2048</option>
+                <option value="quality">подробный · ~5 мин, текстура 4096</option>
+              </select>
+            </label>
+            <label>seed
+              <span class="cr-seed">
+                <input type="number" id="cr-seed" value="0" min="0" step="1">
+                <button class="btn sq" id="cr-seed-rnd" title="Случайный seed">
+                  <i data-icon="dice" data-icon-class="icon-sm"></i>
+                </button>
+              </span>
+            </label>
+            <button class="btn primary" id="cr-send" disabled>
+              <i data-icon="cube" data-icon-class="icon-sm"></i>сделать 3D
+            </button>
+          </div>
+        </div>
+
+        <div class="cr-col">
+          <div class="cr-step"><i data-icon="clock" data-icon-class="icon-sm"></i>очередь</div>
+          <div class="cr-worker" id="cr-worker"></div>
+          <div class="cr-queue" id="cr-queue"></div>
+          <div class="dim cr-foot">
+            Задания считает отдельный процесс, по одному: видеокарта одна.
+            Здесь же видно и то, что запустил агент — столбец «кто».
+          </div>
+        </div>
+
+      </div>
+    </div>
   </section>
 
   <!-- ----------------------------------------------------------- корзина -->
@@ -219,7 +391,9 @@
           <div class="trash-title">Корзина</div>
           <div class="trash-sub" id="trash-sub">—</div>
         </div>
-        <button class="btn danger" id="purge-all">очистить корзину</button>
+        <button class="btn danger" id="purge-all">
+          <i data-icon="trash" data-icon-class="icon-sm"></i>очистить корзину
+        </button>
       </div>
       <div class="grid" id="trash-grid"></div>
       <div class="empty" id="trash-empty" hidden>
@@ -230,6 +404,21 @@
   </section>
 
 </main>
+
+<!-- Строка состояния. В редакторах она несёт то, что верно всегда и не
+     зависит от раздела: жив ли сервер, сколько всего накоплено. Раньше это
+     жило внизу панели разделов и пропадало на узком экране вместе с ней. -->
+<footer id="statusbar">
+  <div class="live" id="live" data-state="connecting">
+    <span class="dot"></span><span class="live-text">подключение…</span>
+  </div>
+  <span class="sep"></span>
+  <div class="st"><b id="stat-count">—</b><span>моделей</span></div>
+  <div class="st"><b id="stat-size">—</b><span>на диске</span></div>
+  <span class="spacer"></span>
+  <div class="st st-hint" id="status-hint"></div>
+</footer>
+
 </div>
 
 <div id="lightbox" class="lightbox" hidden>
@@ -251,10 +440,19 @@
 
 <div id="toasts"></div>
 
+<!-- Первым: набор значков. app.js и nav.js зовут icon() уже при разборе
+     своих реестров, и к этому моменту он обязан существовать. -->
+<script src="/static/icons.js"></script>
 <script src="/static/app.js"></script>
 <!-- Загружается после app.js: оборачивает его applyModels, чтобы получать
      то же состояние, не открывая второго соединения SSE. -->
 <script src="/static/nav.js"></script>
+<!-- После nav.js: тот держит реестр разделов и всплывающие сообщения, а этот
+     их зовёт. Слушает то же событие photo3d:state, второго SSE не открывает. -->
+<script src="/static/create.js"></script>
+<!-- Оболочка: ширины доков, сворачивание панели разделов, подсказка в строке
+     состояния. Ничего не знает о моделях — только о раскладке. -->
+<script src="/static/shell.js"></script>
 <!-- Модуль: три и его аддоны — ES-модули, иначе карта импортов не применится.
      Наружу отдаёт window.walk, через него его и зовёт app.js. -->
 <script type="module" src="/static/walk.js"></script>

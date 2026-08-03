@@ -80,7 +80,7 @@ function renderList() {
 
     const thumb = m.views.length
       ? `<img src="/files/${m.id}/views/${m.views[0]}?v=${m.updated}" alt="">`
-      : `<div class="no-thumb">◇</div>`;
+      : `<div class="no-thumb">${icon("cube")}</div>`;
     const badge = m.engine
       ? `<span class="badge ${m.engine === "stub" ? "stub" : ""}">${m.engine}</span>`
       : "";
@@ -120,7 +120,16 @@ function select(id) {
   state.srcKey = srcKey;
 
   state.glbUrl = m.glb ? `/files/${m.id}/model.glb?v=${m.updated}` : null;
-  if (window.walk) window.walk.setModel(state.glbUrl);
+  // Масштаб едет вместе с адресом: прогулка сама его не знает, а показывать
+  // локацию размером с табурет незачем — человек уже подобрал число однажды.
+  state.walkScale = m.scale || 1;
+  state.colliderUrl = m.collider
+    ? `/files/${m.id}/collider.glb?v=${m.updated}` : null;
+  if (window.walk) {
+    window.walk.setModel(state.glbUrl, {
+      id: m.id, scale: state.walkScale, collider: state.colliderUrl,
+    });
+  }
 
   if (m.glb) {
     // v= сбрасывает кэш, когда модель перегенерировали под тем же id
@@ -147,7 +156,8 @@ function select(id) {
     <span><span class="k">оболочка</span> ${wt}</span>
     <span><span class="k">время</span> <span class="v">${m.elapsed} с</span></span>
     <span><span class="k">размер</span> <span class="v">${fmtBytes(m.glb_size)}</span></span>
-    <span><a href="/files/${m.id}/model.glb" download>скачать GLB</a></span>`;
+    <span><a href="/files/${m.id}/model.glb" download>${
+      icon("download", "icon-sm")}скачать GLB</a></span>`;
 
   const strip = $("strip");
   strip.innerHTML = "";
@@ -501,7 +511,13 @@ function setMode(mode, auto = false) {
   // общаются через window.walk. Модуль грузится позже разметки, так что
   // проверка на его наличие обязательна, а не «на всякий случай».
   if (window.walk) {
-    if (isWalk) window.walk.enter(state.glbUrl);
+    if (isWalk) {
+      window.walk.enter(state.glbUrl, {
+        id: state.selectedId,
+        scale: state.walkScale || 1,
+        collider: state.colliderUrl || null,
+      });
+    }
     else window.walk.exit();
   } else if (isWalk) {
     $("walk-stage").hidden = false;

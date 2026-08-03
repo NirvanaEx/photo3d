@@ -96,7 +96,7 @@ def read_ui(d: Path) -> dict[str, Any]:
 
 # Что человек вправе править через интерфейс. Список закрытый: обработчик
 # принимает JSON из браузера, и без него в ui.json приехало бы что угодно.
-UI_FIELDS = {"title", "note", "star", "deleted_at"}
+UI_FIELDS = {"title", "note", "star", "deleted_at", "scale"}
 
 
 def patch_ui(d: Path, patch: dict[str, Any]) -> dict[str, Any]:

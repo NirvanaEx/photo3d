@@ -18,7 +18,9 @@ import base64
 import json
 import mimetypes
 import os
+import re
 import secrets
+import time
 from pathlib import Path
 
 import anyio
@@ -26,11 +28,13 @@ import uvicorn
 from sse_starlette.sse import EventSourceResponse
 from starlette.applications import Starlette
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import FileResponse, JSONResponse, PlainTextResponse
+from starlette.responses import (FileResponse, HTMLResponse, JSONResponse,
+                                 PlainTextResponse)
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
-from server import config
+from server import config, jobs
+from server.errors import PipelineError
 from server.store import ModelStore
 
 from . import library
@@ -126,6 +130,11 @@ def _build_payload(model_id: str, root: Path) -> dict:
         "parents": library.parents_of(meta),
         "glb": glb.exists(),
         "glb_size": glb.stat().st_size if glb.exists() else 0,
+        # Грубая оболочка для столкновений, если её собрали
+        # (scripts/make_collider.py). Прогулка считает столкновения по самой
+        # геометрии только до 12 000 треугольников - выше человек ходил по
+        # плоскому полу и проходил сквозь стены.
+        "collider": (d / "collider.glb").exists(),
         "size": library.folder_size(d),
         "fresh": library.is_fresh(d),
         # Правится человеком через интерфейс, лежит в отдельном ui.json
@@ -133,6 +142,12 @@ def _build_payload(model_id: str, root: Path) -> dict:
         "note": ui.get("note") or "",
         "star": bool(ui.get("star")),
         "deleted_at": ui.get("deleted_at") or 0,
+        # Во сколько раз увеличить модель при показе. Генератор нормирует всё
+        # в единичный куб, и комната приезжает размером с табурет: масштаба в
+        # фотографии нет и взяться ему неоткуда. Число подбирает человек
+        # глазами в прогулке, поэтому живёт оно здесь, а не в meta.json.
+        # 1 означает «не трогали» - его и отдаём, когда поля нет.
+        "scale": float(ui.get("scale") or 1),
     }
 
 
@@ -190,11 +205,72 @@ def _signature() -> str:
         parts.append(f"trash:{library.TRASH_DIR.stat().st_mtime_ns}")
     except OSError:
         parts.append("trash:0")
+
+    # Очередь меняется чаще всего остального: пока идёт задание, воркер
+    # переписывает его файл на каждом этапе. Свой отпечаток она считает сама
+    # (server/jobs.py) - одним stat на задание, как и модели здесь.
+    parts.append(jobs.stamp())
     return "|".join(parts)
 
 
 async def index(request):
-    return FileResponse(STATIC / "index.html")
+    # Ссылки на свою статику получают ?v=<время правки файла>. Иначе браузер
+    # показывает старый CSS: копия, попавшая в кэш ДО того, как появился
+    # заголовок cache-control (см. NoCacheStatic), остаётся «свежей» по
+    # эвристике Chromium, и её не сбрасывает ни обычная перезагрузка, ни
+    # открытие в новой вкладке - проверено, не сбрасывает.
+    #
+    # Меняется имя ресурса - значит запись в кэше другая, и файл читается
+    # заново. Дальше о свежести заботится уже no-cache, но эта строка нужна,
+    # чтобы вопрос не возвращался при каждой правке интерфейса.
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    # Список файлов НЕ перечислен руками, а собирается обходом папки. Ровно
+    # этот перечень уже подводил: добавленный theme.css в него не попал,
+    # приехал из кэша старым, и вместе с ним пропали переменные — панель
+    # разделов осталась шириной 48 пикселей вместо 194. Симптом при этом
+    # выглядел как ошибка в CSS, а не как кэш, и искали его не там.
+    #
+    # glob по верхнему уровню, а не rglob: vendor/ намеренно не трогаем -
+    # версия там прибита, содержимое не меняется, а лишний параметр сломал бы
+    # карту импортов, по которой аддоны three ищут друг друга.
+    for path in sorted(STATIC.glob("*.css")) + sorted(STATIC.glob("*.js")):
+        try:
+            stamp = int(path.stat().st_mtime)
+        except OSError:
+            continue
+        html = html.replace(
+            f'"/static/{path.name}"', f'"/static/{path.name}?v={stamp}"')
+    return HTMLResponse(html)
+
+
+class NoCacheStatic(StaticFiles):
+    """Статика с обязательной проверкой свежести.
+
+    StaticFiles отдаёт ETag и Last-Modified, но не Cache-Control, и браузер
+    решает сам: Chromium кэширует такой файл эвристически надолго. Симптом
+    молчаливый и дорогой - правишь style.css, перезагружаешь, ничего не
+    меняется, и полчаса ищешь ошибку в правилах, которых браузер не читал.
+
+    no-cache, а не no-store: файл остаётся в кэше, но перед показом
+    проверяется по ETag. Ответ 304 без тела - трафика столько же, сколько
+    было, зато правка видна сразу. Для локального интерфейса это верный
+    размен; на публичной раздаче так делать не стоит.
+    """
+
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        response.headers["cache-control"] = "no-cache"
+        return response
+
+
+async def manifest(request):
+    # Отдаётся с корня, а не из /static, хотя лежит там же. Причина: область
+    # действия приложения (scope) отсчитывается от места манифеста, и по
+    # адресу /static/manifest.json браузер счёл бы приложением только /static/*,
+    # а стартовую страницу «/» - чужой. Симптом был бы молчаливый: кнопка
+    # «Установить» просто не появляется, без объяснений в консоли.
+    return FileResponse(STATIC / "manifest.json",
+                        media_type="application/manifest+json")
 
 
 def _state() -> dict:
@@ -206,7 +282,16 @@ def _state() -> dict:
     alive |= {str(library.TRASH_DIR / m["id"]) for m in trash}
     for key in [k for k in _payload_cache if k not in alive]:
         del _payload_cache[key]
-    return {"models": models, "trash": trash}
+    # Очередь едет тем же куском, что и модели: у страницы одно соединение
+    # SSE, и заводить второе ради заданий значило бы обходить папки на drvfs
+    # дважды. Заданий десятки, а не тысячи - список уходит целиком.
+    return {
+        "models": models,
+        "trash": trash,
+        "jobs": jobs.listing(limit=40),
+        "worker": {k: v for k, v in jobs.worker_status().items()
+                   if k in ("alive", "pid", "engine", "job")},
+    }
 
 
 # Обход папок идёт через drvfs, где один stat стоит миллисекунды, а модели
@@ -356,15 +441,260 @@ async def api_patch_ui(request):
         clean["note"] = str(patch["note"] or "").strip()[:500] or None
     if "star" in patch:
         clean["star"] = bool(patch["star"]) or None
+    if "scale" in patch:
+        try:
+            scale = float(patch["scale"])
+        except (TypeError, ValueError):
+            return _fail("масштаб не число",
+                         "отправляй {\"scale\": 9.0}")
+        # Границы широкие, но не бесконечные: за ними тонут и физика, и тени.
+        # Снизу 0.01 - модель в сантиметр, сверху 1000 - стадион из предмета
+        # в метр. NaN не пройдёт ни одно сравнение и отсеется этой же
+        # проверкой, отдельного isnan не нужно.
+        if not 0.01 <= scale <= 1000:
+            return _fail(f"масштаб {scale} вне разумных границ",
+                         "допустимо от 0.01 до 1000")
+        # Единица - это «не масштабировали», её храним как отсутствие поля:
+        # иначе ui.json обрастает записями scale=1 у каждой модели, которую
+        # разок открыли в прогулке.
+        clean["scale"] = None if abs(scale - 1) < 1e-6 else round(scale, 4)
     if not clean:
         return _fail("нечего менять",
-                     "поддерживаются поля title, note, star")
+                     "поддерживаются поля title, note, star, scale")
     try:
         library.patch_ui(d, clean)
     except OSError as e:
         return _fail(f"не удалось записать ui.json: {e}",
                      "проверь права на папку модели", code=500)
     return JSONResponse({"ok": True, "id": mid})
+
+
+# ----------------------------------------------------------------- создание
+
+# Что принимаем на вход. Список короткий намеренно: всё это открывает PIL, и
+# всё это годится генератору. Прозрачность в PNG и WebP не помеха, а помощь -
+# готовая маска обычно точнее автоматической.
+PHOTO_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
+MAX_UPLOAD = 40 * 1024 * 1024
+
+MODES = ("draft", "fast", "quality")
+
+_NAME_OK = re.compile(r"[^A-Za-zА-Яа-яЁё0-9._-]+")
+
+
+def _safe_name(raw: str) -> str:
+    """Имя файла, пригодное для data/input.
+
+    Берётся только последний сегмент - браузер шлёт имя как есть, а в нём
+    бывает и путь. Дальше вычищается всё, кроме букв, цифр и трёх знаков:
+    имя попадает в путь и в URL, и разбираться потом с кавычками, пробелами
+    и `..` дороже, чем один раз причесать.
+    """
+    name = Path(str(raw or "")).name.strip()
+    stem, dot, suffix = name.rpartition(".")
+    if not dot:
+        stem, suffix = name, "jpg"
+    stem = _NAME_OK.sub("-", stem).strip("-.") or "photo"
+    suffix = _NAME_OK.sub("", suffix).lower() or "jpg"
+    return f"{stem[:60]}.{suffix}"
+
+
+def _free_name(name: str) -> Path:
+    """Не затирать чужое. Второй файл с тем же именем - это почти всегда
+    другой снимок, а не тот же самый: перезаписать его значило бы потерять
+    исходник уже сделанной модели."""
+    target = config.INPUT_DIR / name
+    if not target.exists():
+        return target
+    stem, _, suffix = name.rpartition(".")
+    for i in range(2, 1000):
+        cand = config.INPUT_DIR / f"{stem}-{i}.{suffix}"
+        if not cand.exists():
+            return cand
+    return config.INPUT_DIR / f"{stem}-{int(time.time())}.{suffix}"
+
+
+async def api_upload(request):
+    """Положить фото в data/input.
+
+    До этого человеку приходилось копировать файлы туда руками - через
+    проводник в \\\\wsl$ или через WSL. Это и был первый барьер: интерфейс
+    показывал библиотеку, но принять новый кадр не умел.
+    """
+    try:
+        form = await request.form(max_files=8)
+    except Exception as e:  # noqa: BLE001
+        return _fail(f"не разобрал загрузку: {e}",
+                     "отправляй файл полем file в multipart/form-data")
+
+    saved, skipped = [], []
+    for item in form.getlist("file"):
+        if not hasattr(item, "read"):
+            continue
+        raw = getattr(item, "filename", "") or ""
+        # Расширение смотрим у ИСХОДНОГО имени, а не у причёсанного: _safe_name
+        # достраивает недостающее до .jpg, и файл вовсе без расширения прошёл
+        # бы как картинка, а свалился бы потом на разборе кадра.
+        if Path(raw).suffix.lower() not in PHOTO_SUFFIXES:
+            skipped.append(f"{Path(raw).name or 'без имени'}: не картинка")
+            continue
+        name = _safe_name(raw)
+        data = await item.read()
+        if len(data) > MAX_UPLOAD:
+            skipped.append(f"{name}: {len(data) / 1e6:.0f} МБ — больше предела")
+            continue
+        if not data:
+            skipped.append(f"{name}: пустой файл")
+            continue
+        target = _free_name(name)
+        target.write_bytes(data)
+        saved.append({"name": target.name, "size": len(data)})
+
+    if not saved:
+        return _fail("ни один файл не принят",
+                     "; ".join(skipped) or f"годятся {', '.join(sorted(PHOTO_SUFFIXES))}")
+    return JSONResponse({"ok": True, "saved": saved, "skipped": skipped})
+
+
+def _input_photo(name: str) -> Path | None:
+    p = config.INPUT_DIR / _safe_name(name)
+    return p if p.is_file() and p.suffix.lower() in PHOTO_SUFFIXES else None
+
+
+async def api_check(request):
+    """Разбор кадра до генерации: силуэт и замеры.
+
+    В очередь НЕ ставится, и это решение. Проверка идёт секунду-две на
+    процессоре, а очередь заведена под видеокарту: встань она позади
+    четырёхминутной генерации - кадры перестали бы проверять вовсе, а это
+    единственный дешёвый способ отсеять половину неудач.
+    """
+    body = await _json(request)
+    if isinstance(body, JSONResponse):
+        return body
+    src = _input_photo(body.get("name", ""))
+    if src is None:
+        return _fail("такого файла нет в data/input",
+                     "загрузи фото заново — список мог устареть", code=404)
+
+    # Импорт здесь, а не наверху: rembg тянет onnxruntime на сотни мегабайт, а
+    # веб-процесс открыт часами и чаще всего проверок не делает вовсе. ОЗУ
+    # здесь узкое место, и платить за модель, которой не пользуются, незачем.
+    from pipeline import preprocess
+
+    def _work():
+        m = preprocess.measure(src)
+        shot = preprocess.preview(
+            m.pop("_rgba"), config.CACHE_DIR / "checks" / f"{src.stem}.png")
+        return m, shot
+
+    try:
+        m, shot = await _in_thread(_work)
+    except PipelineError as e:
+        return _fail(e.reason, e.hint)
+    except Exception as e:  # noqa: BLE001
+        return _fail(f"разбор кадра не удался: {type(e).__name__}: {e}",
+                     "проверь, что файл открывается как картинка", code=500)
+
+    return JSONResponse({
+        "ok": True,
+        "name": src.name,
+        "measures": m,
+        "warnings": preprocess.verdict(m),
+        # Картинка обязательна, а не в дополнение к числам: плоский предмет -
+        # стена, панно, вывеска - по числам неотличим от объёмного, и виден
+        # только глазом (см. README, «Проверка кадра до генерации»).
+        "preview": f"/checks/{shot.name}",
+    })
+
+
+async def api_job_new(request):
+    """Поставить задание в очередь от лица человека.
+
+    Страница по-прежнему ничего не исполняет: она кладёт файл в data/jobs, а
+    считает воркер. Поэтому её можно ронять и перезапускать посреди работы -
+    ровно то свойство, ради которого веб держали в стороне от пайплайна.
+    """
+    body = await _json(request)
+    if isinstance(body, JSONResponse):
+        return body
+
+    src = _input_photo(body.get("image", ""))
+    if src is None:
+        return _fail("такого файла нет в data/input",
+                     "загрузи фото и повтори", code=404)
+
+    mode = str(body.get("mode", "fast"))
+    if mode not in MODES:
+        return _fail(f"неизвестный режим {mode!r}",
+                     f"допустимы: {', '.join(MODES)}")
+    try:
+        seed = int(body.get("seed", 0))
+    except (TypeError, ValueError):
+        return _fail("seed не число", "оставь 0 или введи целое")
+    if not 0 <= seed < 2 ** 31:
+        return _fail(f"seed {seed} вне границ", "допустимо от 0 до 2147483647")
+
+    # Исполнителя поднимаем здесь же. Требовать «сначала запусти воркер» от
+    # человека за браузером нельзя: он нажал кнопку, а не подписался на
+    # обслуживание процессов.
+    st = await _in_thread(jobs.ensure_worker)
+    if not st.get("alive"):
+        return _fail("исполнитель заданий не поднялся",
+                     jobs.worker_hint().replace("\n", " "), code=503)
+
+    job = jobs.submit("photo_to_3d",
+                      {"image": str(src), "mode": mode, "seed": seed},
+                      by="human", title=src.name)
+    return JSONResponse({"ok": True, "job": job})
+
+
+async def api_job_cancel(request):
+    jid = request.path_params["jid"]
+    if not jobs.valid_id(jid):
+        return _fail(f"неподходящий идентификатор {jid!r}",
+                     "ожидается вид j_a3f7", code=404)
+    if not jobs.cancel(jid):
+        return _fail(f"задание {jid} не найдено",
+                     "обнови страницу: очередь могла уехать", code=404)
+    # Честно про предел: уже считающееся задание маркер не прерывает.
+    job = jobs.read(jid)
+    running = job.get("state") == jobs.RUNNING
+    return JSONResponse({
+        "ok": True, "id": jid, "running": running,
+        "note": ("задание уже считается — оно доработает до конца, "
+                 "прервать генерацию на полпути нельзя") if running else "",
+    })
+
+
+async def _json(request) -> dict | JSONResponse:
+    try:
+        body = await request.json()
+    except ValueError:
+        return _fail("тело запроса не разобрано как JSON")
+    if not isinstance(body, dict):
+        return _fail("ожидается объект JSON")
+    return body
+
+
+def _serve_flat(root: Path, name: str):
+    """Раздача одного файла из плоской папки - исходников и силуэтов.
+
+    Имя причёсывается тем же _safe_name, что и при приёме: `..` и косые
+    черты после него не выживают, поэтому за пределы папки запрос не уйдёт.
+    """
+    target = root / _safe_name(name)
+    if not target.is_file():
+        return PlainTextResponse("not found", status_code=404)
+    return FileResponse(target)
+
+
+async def input_file(request):
+    return _serve_flat(config.INPUT_DIR, request.path_params["name"])
+
+
+async def check_file(request):
+    return _serve_flat(config.CACHE_DIR / "checks", request.path_params["name"])
 
 
 def _serve(root: Path, mid: str, rel: str):
@@ -465,6 +795,7 @@ class SameOriginOnly(BaseHTTPMiddleware):
 def build_app() -> Starlette:
     routes = [
         Route("/", index),
+        Route("/manifest.json", manifest),
         Route("/api/models", api_models),
         Route("/api/events", api_events),
         Route("/api/models/{mid}/delete", api_delete, methods=["POST"]),
@@ -472,9 +803,18 @@ def build_app() -> Starlette:
         Route("/api/trash/purge", api_purge_all, methods=["POST"]),
         Route("/api/trash/{mid}/restore", api_restore, methods=["POST"]),
         Route("/api/trash/{mid}/purge", api_purge, methods=["POST"]),
+        # Создание. Всё изменяющее - POST, и все они проходят через
+        # SameOriginOnly: постановка задания с чужой вкладки заняла бы
+        # видеокарту на четыре минуты.
+        Route("/api/upload", api_upload, methods=["POST"]),
+        Route("/api/check", api_check, methods=["POST"]),
+        Route("/api/jobs", api_job_new, methods=["POST"]),
+        Route("/api/jobs/{jid}/cancel", api_job_cancel, methods=["POST"]),
         Route("/files/{mid}/{path:path}", model_file),
         Route("/trash-files/{mid}/{path:path}", trash_file),
-        Mount("/static", StaticFiles(directory=str(STATIC))),
+        Route("/input/{name}", input_file),
+        Route("/checks/{name}", check_file),
+        Mount("/static", NoCacheStatic(directory=str(STATIC))),
     ]
     application = Starlette(routes=routes)
     application.add_middleware(SameOriginOnly)

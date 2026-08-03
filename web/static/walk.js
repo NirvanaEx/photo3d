@@ -36,7 +36,13 @@ const DRAG_AIR = 1.2;
 const AIR_CONTROL = 0.25;   // управляемость в прыжке — доля земной
 const SUBSTEPS = 5;         // подшагов физики на кадр: капсула не должна
                             // проскакивать сквозь стену за один большой шаг
-const FALL_LIMIT = -30;     // провалился ниже — вернуть на старт
+// Провалился ниже — вернуть на старт. Не константа, а функция от сцены:
+// прежние -30 назначались, когда любая модель была размером с метр. С
+// масштабом сцены стали разными, и падение с шестиметрового этажа до -30
+// длится две с половиной секунды — за них человек успевает решить, что
+// прогулка сломалась. Вниз ограничено пятью метрами: у мелкого предмета
+// провалиться глубже, чем на свой рост, тоже незачем.
+const fallLimit = () => -Math.max(5, lastSize.y * 2);
 
 // Порог, за которым столкновения считаются по габаритному ящику, а не по
 // самой геометрии. Число не из головы, а из замера сборки октодерева:
@@ -58,7 +64,17 @@ const bus = {
   active: false,
   url: null,                // какой GLB показывать
   loadedUrl: null,
+  modelId: null,            // чей масштаб сохранять
+  scale: 1,
+  collider: null,           // адрес грубой оболочки, если её собрали
 };
+
+// Границы ползунка масштаба. Генератор нормирует любую модель в единичный куб,
+// поэтому число, превращающее её в помещение, всегда одного порядка: комната
+// 9 метров из куба в метр - это ×9. Шкала логарифмическая: на линейной первая
+// половина хода уходила бы на разницу между ×1 и ×1.5, которую не видно.
+const SCALE_MIN = 0.1;
+const SCALE_MAX = 100;
 
 // Слой столкновений. Октодерево собирает треугольники ПО СЛОЮ, а не по
 // видимости (см. Octree.fromGraphNode: там layers.test, и только он), поэтому
@@ -81,6 +97,15 @@ let onFloor = false;
 let colliderNote = "";       // чем считаются столкновения — показывается в панели
 let startPoint = new THREE.Vector3(0, 0, 3);
 let lastTris = 0, lastSize = new THREE.Vector3(1, 1, 1);
+// Источники света из GLB. Держим списком, потому что рамку их теней надо
+// пересчитывать при каждой смене масштаба, а обходить сцену ради этого заново
+// — лишняя работа на каждом движении ползунка.
+const lights = [];
+let saveTimer = 0;
+// Грубая оболочка столкновений (scripts/make_collider.py). Живёт отдельным
+// объектом рядом с моделью: видимой она не бывает никогда, её единственная
+// задача - попасть в октодерево вместо трёхсоттысячной сетки.
+let colliderMesh = null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -166,6 +191,23 @@ function build() {
   document.addEventListener("keyup", onKey);
   window.addEventListener("blur", () => keys.clear());
 
+  const slider = $("walk-scale");
+  if (slider) {
+    slider.addEventListener("input", onScaleInput);
+    // change, а не только input: событие приходит по отпусканию мыши и по
+    // концу перебора стрелками — ровно тогда, когда пора считать дерево
+    // столкновений и писать файл.
+    slider.addEventListener("change", onScaleCommit);
+    // Ползунок не должен ловить WASD: он в фокусе после клика, и стрелки с
+    // пробелом уходили бы ему, а не движению.
+    slider.addEventListener("keydown", (e) => e.stopPropagation());
+    $("walk-scale-reset").addEventListener("click", () => {
+      bus.scale = 1;
+      layout(1, { rebuild: true, respawnPlayer: true });
+      saveScale(1);
+    });
+  }
+
   bus.ready = true;
   resize();
 }
@@ -187,7 +229,16 @@ function note(text) {
 
 // ------------------------------------------------------------------ модель
 
+function disposeCollider() {
+  if (!colliderMesh) return;
+  world.remove(colliderMesh);
+  colliderMesh.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
+  colliderMesh = null;
+}
+
 function disposeModel() {
+  lights.length = 0;
+  disposeCollider();
   if (!model) return;
   world.remove(model);
   model.traverse((o) => {
@@ -220,13 +271,6 @@ async function loadModel(url) {
   const gltf = await new GLTFLoader().loadAsync(url);
   model = gltf.scene;
 
-  // Модель ставится НА пол и по центру: GLB приходят с началом координат где
-  // попало, и без этого предмет оказывается либо вкопанным, либо висящим.
-  const box = new THREE.Box3().setFromObject(model);
-  const size = new THREE.Vector3(), centre = new THREE.Vector3();
-  box.getSize(size); box.getCenter(centre);
-  model.position.set(-centre.x, -box.min.y, -centre.z);
-
   let tris = 0;
   model.traverse((o) => {
     if (o.isLight) {
@@ -238,16 +282,9 @@ async function loadModel(url) {
       if (o.shadow) {
         o.shadow.mapSize.set(2048, 2048);
         o.shadow.bias = -0.002;
-        // Рамку тени обязательно под габарит сцены. По умолчанию у
-        // направленного источника она ±5 м, и всё, что дальше, считается
-        // затенённым: пятнадцатиметровый коридор был тёмным целиком, и
-        // яркость не менялась от интенсивности солнца вовсе.
-        const reach = Math.max(size.x, size.y, size.z);
-        Object.assign(o.shadow.camera, {
-          left: -reach, right: reach, top: reach, bottom: -reach,
-          near: 0.5, far: reach * 6,
-        });
-        o.shadow.camera.updateProjectionMatrix();
+        // Рамку тени ставит layout(): она зависит от габарита, а габарит —
+        // от масштаба, который человек меняет ползунком уже после загрузки.
+        lights.push(o);
       }
       // Интенсивность НЕ трогаем: в glTF она в люксах, и three начиная с
       // r155 считает направленный свет в тех же люксах — 28686 у солнца
@@ -267,30 +304,165 @@ async function loadModel(url) {
 
   world.add(model);
   lastTris = tris;
+
+  // Оболочка грузится после модели, а не параллельно: она нужна только для
+  // октодерева, и ради неё задерживать показ сцены незачем. Не собралась -
+  // столкновения останутся прежними, а причина уедет в панель.
+  if (bus.collider) {
+    try {
+      const hull = await new GLTFLoader().loadAsync(bus.collider);
+      colliderMesh = hull.scene;
+      colliderMesh.visible = false;   // невидимость октодереву не мешает:
+      world.add(colliderMesh);        // оно смотрит на слой, а не на visible
+    } catch (e) {
+      colliderMesh = null;
+      note("оболочка столкновений не загрузилась: " + e.message
+         + " — стены проходимы, пол на месте");
+    }
+  }
+
+  layout(bus.scale, { rebuild: true, respawnPlayer: true });
+}
+
+// Раскладка сцены под текущий масштаб: положение модели, рамки теней, режим
+// «локация или предмет», столкновения, место игрока.
+//
+// Вынесено из loadModel отдельной функцией, потому что вызывается дважды —
+// после загрузки и на каждое движение ползунка. Всё, что здесь есть, зависит
+// от ГАБАРИТА, а габарит меняется вместе с масштабом: оставь любую строку в
+// loadModel — и после увеличения комната останется вкопанной в пол, с рамкой
+// теней от старого размера и игроком, стоящим снаружи.
+function layout(scale, { rebuild = false, respawnPlayer = false } = {}) {
+  if (!model) return;
+
+  // Замер строго после сброса позиции и обновления матриц: Box3.setFromObject
+  // читает мировые координаты, и без updateMatrixWorld он вернул бы габарит
+  // предыдущего масштаба — модель прыгала бы под пол через раз.
+  model.scale.setScalar(scale);
+  model.position.set(0, 0, 0);
+  model.updateMatrixWorld(true);
+
+  const box = new THREE.Box3().setFromObject(model);
+  const size = new THREE.Vector3(), centre = new THREE.Vector3();
+  box.getSize(size); box.getCenter(centre);
+
+  // Модель ставится НА пол и по центру: GLB приходят с началом координат где
+  // попало, и без этого предмет оказывается либо вкопанным, либо висящим.
+  model.position.set(-centre.x, -box.min.y, -centre.z);
+  model.updateMatrixWorld(true);
+
+  // Оболочке — ТА ЖЕ трансформация, а не свой подгон по собственному боксу.
+  // Она собрана из той же геометрии, но децимация срезает выступающие углы,
+  // и её габарит на доли процента меньше. Подгони её отдельно — стены разъедутся
+  // с видимыми на пару сантиметров, и человек упрётся в воздух перед стеной.
+  if (colliderMesh) {
+    colliderMesh.scale.copy(model.scale);
+    colliderMesh.position.copy(model.position);
+    colliderMesh.updateMatrixWorld(true);
+  }
+
+  // Рамка тени обязательно под габарит сцены. По умолчанию у направленного
+  // источника она ±5 м, и всё, что дальше, считается затенённым:
+  // пятнадцатиметровый коридор был тёмным целиком, и яркость не менялась от
+  // интенсивности солнца вовсе.
+  const reach = Math.max(size.x, size.y, size.z);
+  for (const light of lights) {
+    Object.assign(light.shadow.camera, {
+      left: -reach, right: reach, top: reach, bottom: -reach,
+      near: 0.5, far: reach * 6,
+    });
+    light.shadow.camera.updateProjectionMatrix();
+  }
+
   lastSize = size;
 
   // Локация — то, внутрь чего входят, а не то, что обходят кругом. Отличаем
   // по габаритам: в человеческий рост и шире четырёх метров. Ошибиться тут
   // дёшево, а разница принципиальная — где поставить игрока.
+  const wasLocation = isLocation;
   setLocation(size.y > 2.2 && Math.max(size.x, size.z) > 4, size);
-  rebuildOctree(tris, size);
 
-  if (isLocation) {
-    // Внутрь, в середину пола, лицом вдоль длинной оси — иначе игрок
-    // оказывается снаружи закрытой коробки и видит её глухую спину.
-    startPoint.set(0, 0, 0);
-    respawn();
-    camera.rotation.set(0, size.x > size.z ? Math.PI / 2 : 0, 0, "YXZ");
-  } else {
-    // Предмет обходят: встаём на полтора его габарита и лицом к нему.
-    startPoint.set(0, 0, Math.max(size.x, size.z) / 2 + Math.max(1.6, size.y * 1.5));
-    respawn();
-    camera.lookAt(0, Math.min(size.y * 0.6, EYE), 0);
+  // Столкновения пересобираются не на каждое движение ползунка: на плотной
+  // сетке это секунды (см. OCTREE_TRI_LIMIT), и таскать ползунок стало бы
+  // невозможно. Зовём по отпусканию — и обязательно при смене режима, иначе
+  // выросшая до локации модель осталась бы с коллайдером предмета.
+  if (rebuild || wasLocation !== isLocation) rebuildOctree(lastTris, size);
+
+  if (respawnPlayer || wasLocation !== isLocation) {
+    if (isLocation) {
+      // Внутрь, в середину пола, лицом вдоль длинной оси — иначе игрок
+      // оказывается снаружи закрытой коробки и видит её глухую спину.
+      startPoint.set(0, 0, 0);
+      respawn();
+      camera.rotation.set(0, size.x > size.z ? Math.PI / 2 : 0, 0, "YXZ");
+    } else {
+      // Предмет обходят: встаём на полтора его габарита и лицом к нему.
+      startPoint.set(0, 0, Math.max(size.x, size.z) / 2 + Math.max(1.6, size.y * 1.5));
+      respawn();
+      camera.lookAt(0, Math.min(size.y * 0.6, EYE), 0);
+    }
   }
 
   $("walk-model").textContent =
-    `${Math.round(tris / 1000)}k тр · ${size.x.toFixed(1)}×${size.y.toFixed(1)}×${size.z.toFixed(1)} м`
+    `${Math.round(lastTris / 1000)}k тр · ${size.x.toFixed(1)}×${size.y.toFixed(1)}×${size.z.toFixed(1)} м`
     + (isLocation ? " · локация" : "");
+  syncScaleUI(scale, size);
+}
+
+// ---------------------------------------------------------------- масштаб
+
+// Шкала логарифмическая: ползунок делит не сами числа, а их порядок. На
+// линейной ×1…×100 первая четверть хода отвечала бы за ×1…×25, и разница
+// между «предмет» и «комната» пряталась бы в первых пикселях.
+const sliderToScale = (v) =>
+  SCALE_MIN * Math.pow(SCALE_MAX / SCALE_MIN, v / 1000);
+const scaleToSlider = (s) =>
+  Math.round(1000 * Math.log(s / SCALE_MIN) / Math.log(SCALE_MAX / SCALE_MIN));
+
+function syncScaleUI(scale, size) {
+  const slider = $("walk-scale");
+  if (!slider) return;
+  if (document.activeElement !== slider) slider.value = scaleToSlider(scale);
+  // Рядом с множителем — то, ради чего его крутят: реальная высота. Судить
+  // «×9 это много или мало» нельзя, а «потолок 2.7 м» проверяется мгновенно.
+  $("walk-scale-val").textContent =
+    `×${scale < 10 ? scale.toFixed(2) : scale.toFixed(1)} · высота ${size.y.toFixed(1)} м`;
+}
+
+function onScaleInput() {
+  bus.scale = sliderToScale(+$("walk-scale").value);
+  // Без пересборки столкновений: она стоит секунды на плотной сетке, а
+  // ползунок должен идти за мышью. Дерево догонит по отпусканию.
+  layout(bus.scale);
+}
+
+function onScaleCommit() {
+  bus.scale = sliderToScale(+$("walk-scale").value);
+  layout(bus.scale, { rebuild: true, respawnPlayer: true });
+  saveScale(bus.scale);
+}
+
+// Масштаб пишется в ui.json — тот файл, которым владеет веб. В meta.json
+// нельзя: его ведёт пайплайн из соседнего процесса и может переписать в
+// любой момент (см. библиотеку и README, «кто какой файл пишет»).
+function saveScale(scale) {
+  if (!bus.modelId) return;
+  clearTimeout(saveTimer);
+  // Задержка не ради сервера, а ради диска: подбирая размер, человек
+  // отпускает ползунок десяток раз подряд, и каждый раз это перезапись файла.
+  saveTimer = setTimeout(async () => {
+    try {
+      const r = await fetch(`/api/models/${bus.modelId}/ui`, {
+        method: "POST",
+        headers: { "X-Photo3D": "1", "Content-Type": "application/json" },
+        body: JSON.stringify({ scale }),
+      });
+      if (!r.ok) note(`масштаб не сохранился (ошибка ${r.status}) — `
+                    + "он останется до перезагрузки страницы");
+    } catch {
+      note("масштаб не сохранился: сервер не отвечает");
+    }
+  }, 400);
 }
 
 // Пол-подставка, сетка и подсветка нужны предмету и мешают локации: у той
@@ -339,14 +511,47 @@ function rebuildOctree(tris, size, byGeometry = tris <= OCTREE_TRI_LIMIT) {
   // объектов в новую группу в three ОТВЯЗЫВАЕТ их от прежнего родителя —
   // пол уехал бы из сцены вместе с ним. Слой решает это без перестановок.
   let proxy = null;
+
+  // Собранная оболочка бьёт оба прежних варианта: она даёт настоящие стены,
+  // и стоит при этом как лёгкая сетка. Модель тогда со слоя снимается целиком
+  // - считать по ней нечего.
+  if (colliderMesh) {
+    model.traverse((o) => { if (o.isMesh) o.layers.disable(COLLIDE); });
+    colliderMesh.traverse((o) => { if (o.isMesh) o.layers.enable(COLLIDE); });
+    scene.updateMatrixWorld(true);
+    octree.fromGraphNode(scene);
+    let hullTris = 0;
+    colliderMesh.traverse((o) => {
+      if (!o.isMesh) return;
+      const g = o.geometry;
+      hullTris += (g.index ? g.index.count : g.attributes.position.count) / 3;
+    });
+    colliderNote = `по оболочке (${Math.round(hullTris / 1000 * 10) / 10}k тр)`;
+    $("walk-collider").textContent =
+      `${colliderNote} · ${Math.round(performance.now() - t0)} мс`;
+    return;
+  }
+
   if (model) {
     model.traverse((o) => {
       if (o.isMesh) byGeometry ? o.layers.enable(COLLIDE) : o.layers.disable(COLLIDE);
     });
     if (!byGeometry) {
-      proxy = new THREE.Mesh(new THREE.BoxGeometry(
-        Math.max(size.x, 0.05), Math.max(size.y, 0.05), Math.max(size.z, 0.05)));
-      proxy.position.set(0, size.y / 2, 0);
+      // Коробка по габаритам годится, только пока предмет ОБХОДЯТ снаружи.
+      // Внутри локации она не держит вовсе: капсула оказывается со всех
+      // сторон окружена гранями, и октодерево выталкивает её кратчайшим
+      // путём — вниз, сквозь пол. Замер: игрок из (0,0,0) за 90 кадров
+      // уезжал на y=-13.6, onFloor всё это время false.
+      //
+      // Поэтому у локации подменяем коробку плитой под ногами. Стен и мебели
+      // не будет — по тяжёлому скану их и не посчитать, — но ходить можно,
+      // и это честно написано в панели.
+      proxy = isLocation
+        ? new THREE.Mesh(new THREE.BoxGeometry(
+            Math.max(size.x, 0.05), 0.2, Math.max(size.z, 0.05)))
+        : new THREE.Mesh(new THREE.BoxGeometry(
+            Math.max(size.x, 0.05), Math.max(size.y, 0.05), Math.max(size.z, 0.05)));
+      proxy.position.set(0, isLocation ? -0.1 : size.y / 2, 0);
       proxy.visible = false;       // невидимость столкновениям не мешает:
       proxy.layers.enable(COLLIDE);// октодерево смотрит на слой, не на visible
       scene.add(proxy);
@@ -357,7 +562,10 @@ function rebuildOctree(tris, size, byGeometry = tris <= OCTREE_TRI_LIMIT) {
   octree.fromGraphNode(scene);
 
   if (proxy) { scene.remove(proxy); proxy.geometry.dispose(); }
-  colliderNote = !model ? "только пол" : byGeometry ? "по геометрии" : "по габаритам";
+  colliderNote = !model ? "только пол"
+    : byGeometry ? "по геометрии"
+    : isLocation ? "только пол (сетка тяжёлая)"
+    : "по габаритам";
   $("walk-collider").textContent = `${colliderNote} · ${Math.round(performance.now() - t0)} мс`;
 }
 
@@ -416,7 +624,7 @@ function step(dt) {
   collisions();
   camera.position.copy(collider.end);
 
-  if (camera.position.y < FALL_LIMIT) respawn();
+  if (camera.position.y < fallLimit()) respawn();
 }
 
 function tick(now) {
@@ -441,8 +649,13 @@ function stats() {
 
 // -------------------------------------------------------------- наружу
 
-async function enter(url) {
+async function enter(url, opts = {}) {
   bus.active = true;
+  // id, масштаб и оболочка приходят вместе с адресом: без id некуда сохранять,
+  // без сохранённого числа подбор пришлось бы повторять при каждом входе.
+  if (opts.id !== undefined) bus.modelId = opts.id;
+  if (opts.scale !== undefined) bus.scale = opts.scale > 0 ? opts.scale : 1;
+  if (opts.collider !== undefined) bus.collider = opts.collider;
   $("walk-stage").hidden = false;
   try {
     if (!bus.ready) build();
@@ -481,9 +694,12 @@ function exit() {
   if (controls && controls.isLocked) controls.unlock();
 }
 
-function setModel(url) {
+function setModel(url, opts = {}) {
   bus.url = url;
-  if (bus.active) enter(url);
+  if (opts.id !== undefined) bus.modelId = opts.id;
+  if (opts.scale !== undefined) bus.scale = opts.scale > 0 ? opts.scale : 1;
+  if (opts.collider !== undefined) bus.collider = opts.collider;
+  if (bus.active) enter(url, opts);
 }
 
 // Наружу отдаётся не только переключение режима, но и намеренная отладочная

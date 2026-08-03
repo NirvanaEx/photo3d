@@ -1,0 +1,363 @@
+/* Слой оформления: токены и примитивы. Подключается ПЕРВЫМ, до всех
+   остальных таблиц.
+
+   Заведён потому, что раньше единственного источника значений не было:
+   цвета вида #39414f, #2a2f3a, #24406e стояли прямо в правилах, кегль
+   насчитывал девять размеров (10.5 … 22), скругления — девять радиусов
+   (5 … 20). Пока их держали три файла, любая правка «чуть темнее» означала
+   поиск по всем трём и промах в четвёртом месте.
+
+   Здесь только то, что общее для всех разделов. Раздел-специфичное лежит
+   там же, где лежало: style.css — вьюпорт, nav.css — панель и библиотека,
+   create.css — создание, walk.css — прогулка. Разделение сохранено ровно
+   по той причине, что названа в их шапках: над файлами работают
+   параллельно.
+
+   Опорная точка — тёмные редакторы Unity и Godot 4: нейтральный серый без
+   синевы в подложке, тонкая рамка в 1px, плотная сетка, синий акцент
+   исключительно на выделении и фокусе. Насыщенный цвет в таком интерфейсе
+   работает как указатель, а не как украшение: стоит раскрасить кнопки, и
+   взгляду не за что зацепиться. */
+
+:root {
+  /* ---------------------------------------------------------- поверхности */
+  /* Пять ступеней вместо прежних трёх. Три не хватало: наведение и нажатие
+     приходилось делать случайными хексами мимо переменных. */
+  --s-0: #191b1f;   /* фон приложения, вьюпорт */
+  --s-1: #202329;   /* панели, доки */
+  --s-2: #272b32;   /* поднятое: поля ввода, кнопки, карточки */
+  --s-3: #30353d;   /* наведение */
+  --s-4: #3a4049;   /* нажатие, активный элемент */
+
+  --line: #33383f;    /* рамка внутри панели */
+  --line-2: #3f454e;  /* граница между доками, заметнее */
+
+  /* ------------------------------------------------------------- текст */
+  --text: #d6d9df;    /* основной */
+  --text-2: #98a0ac;  /* подписи, второстепенное */
+  --text-3: #6c737e;  /* совсем тихое: единицы, разделители */
+
+  /* ------------------------------------------------------------- цвета */
+  --accent: #4a9eff;
+  --accent-hi: #6cb2ff;   /* наведение по акцентному */
+  --accent-lo: #2b6fd4;   /* нажатие */
+  --accent-soft: rgba(74, 158, 255, .13);   /* заливка выделенного */
+  --accent-line: rgba(74, 158, 255, .42);
+
+  --ok: #56d364;
+  --warn: #e3b341;
+  --danger: #f2726f;
+
+  --ok-soft: rgba(86, 211, 100, .12);
+  --warn-soft: rgba(227, 179, 65, .11);
+  --danger-soft: rgba(242, 114, 111, .11);
+
+  --ok-line: rgba(86, 211, 100, .38);
+  --warn-line: rgba(227, 179, 65, .35);
+  --danger-line: rgba(242, 114, 111, .38);
+
+  /* ------------------------------------------------------------ шрифты */
+  --font: system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI",
+          Roboto, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+
+  /* Пять кеглей вместо девяти. Больше пяти в интерфейсе такого размера
+     различить нельзя — разница в полпикселя читается как случайность,
+     а не как иерархия. */
+  --t-micro: 10.5px;  /* значки-счётчики, подписи под миниатюрами */
+  --t-label: 11.5px;  /* заголовки секций, служебные подписи */
+  --t-sm: 12.5px;     /* второстепенный текст, мелкие кнопки */
+  --t-base: 13px;     /* основной размер интерфейса */
+  --t-lg: 15px;       /* заголовки диалогов и разделов */
+  --t-xl: 21px;       /* числа на плитках сводки */
+
+  /* ------------------------------------------------------------- сетка */
+  --sp-1: 2px;
+  --sp-2: 4px;
+  --sp-3: 6px;
+  --sp-4: 8px;
+  --sp-5: 12px;
+  --sp-6: 16px;
+  --sp-7: 20px;
+  --sp-8: 26px;
+
+  /* Скругления мелкие и их три. Крупный радиус — язык мобильных карточек;
+     в редакторе он размывает границу панели, по которой и читается,
+     где кончается один док и начинается другой. */
+  --r-1: 3px;   /* кнопки, поля, значки */
+  --r-2: 5px;   /* карточки, всплывающие панели */
+  --r-3: 8px;   /* диалоги */
+  --r-pill: 999px;
+
+  /* ---------------------------------------------------------- элементы */
+  --h-sm: 22px;   /* значки-кнопки внутри карточек */
+  --h: 26px;      /* обычная кнопка, поле, выпадающий список */
+  --h-lg: 30px;   /* главная кнопка формы */
+
+  --bar: 38px;      /* верхняя панель инструментов */
+  --status: 24px;   /* строка состояния */
+  --rail: 194px;    /* панель разделов */
+  --rail-min: 48px; /* она же свёрнутая */
+
+  /* -------------------------------------------------------------- тени */
+  /* Две штуки. Тень здесь означает «слой оторван от плоскости» — всплывающее
+     и диалог. На панелях её нет: они лежат в той же плоскости, их разделяет
+     рамка. */
+  --sh-pop: 0 6px 20px rgba(0, 0, 0, .45);
+  --sh-modal: 0 20px 60px rgba(0, 0, 0, .6);
+
+  /* -------------------------------------------------------------- слои */
+  --z-viewport: 3;   /* оверлеи поверх вьюпорта */
+  --z-hud: 4;
+  --z-lightbox: 50;
+  --z-modal: 80;
+  --z-toast: 90;
+
+  --tap: .1s ease;   /* отклик на наведение и нажатие */
+}
+
+/* Тёмная тема для всего, что браузер рисует сам: полосы прокрутки,
+   выпадающий список select, ползунок range, флажки. */
+:root { color-scheme: dark; }
+
+* { box-sizing: border-box; }
+
+/* Атрибут hidden обязан побеждать любой display из правил ниже. Иначе
+   .lightbox{display:grid} держит чёрный оверлей поверх страницы постоянно,
+   а .viewer-empty{display:grid} — надпись поверх модели. */
+[hidden] { display: none !important; }
+
+html, body {
+  margin: 0; height: 100%;
+  background: var(--s-0); color: var(--text);
+  font: var(--t-base)/1.45 var(--font);
+  /* Интерфейс не документ: выделение текста мышью здесь почти всегда
+     промах по кнопке, а не намерение скопировать. Разрешено точечно —
+     там, где значение и правда копируют (см. .pick-text ниже). */
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Элементы форм не наследуют шрифт: браузер даёт им свой, у Chromium это
+   13.3333px системным гротеском. В интерфейсе, где кеглей ровно пять, это
+   шестой — и он лезет в каждую кнопку и каждый список, о котором забыли
+   написать правило. Проще выключить один раз здесь. */
+button, input, select, textarea { font-family: inherit; font-size: inherit; }
+
+/* --------------------------------------------------------------- фокус */
+
+/* Своя рамка фокуса вместо системной. Обязательна: без неё интерфейсом
+   нельзя пользоваться с клавиатуры, а системный пунктир на тёмном фоне
+   почти не виден. :focus-visible, а не :focus, — рамка нужна при обходе
+   табом, но не после щелчка мышью. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: var(--r-1);
+}
+
+::selection { background: rgba(74, 158, 255, .3); }
+
+/* ------------------------------------------------------ полосы прокрутки */
+
+/* Системная полоса в Windows светлая и широкая: в тёмном интерфейсе она
+   читается чужой деталью, особенно в списке моделей, где идёт вплотную
+   к карточкам. */
+
+/* Стандартные scrollbar-width и scrollbar-color включаются ТОЛЬКО там, где
+   webkit-псевдоэлементов нет (Firefox). Chromium с версии 121 понимает и то,
+   и другое, но при обоих заданных отдаёт приоритет стандартным свойствам —
+   и тогда скругления с отступом ниже просто пропали бы. */
+@supports not selector(::-webkit-scrollbar) {
+  * { scrollbar-width: thin; scrollbar-color: #3d434c transparent; }
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+/* Кнопки-стрелки на концах полосы. Задавать их обязательно: при
+   стилизованной полосе они не исчезают сами, а остаются светлыми
+   квадратами системного вида — то есть ровно тем, от чего уходим. */
+::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+::-webkit-scrollbar-thumb {
+  /* Прозрачная рамка вместе с background-clip даёт воздух вокруг ползунка:
+     без неё он прилипает к краю панели и выглядит толще, чем есть.
+     10px минус две рамки по 2px = видимые 6px — тонко, но всё ещё попадаемо
+     мышью. Ниже 4px в полосу уже не прицелиться. */
+  background: #3d434c;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: var(--r-2);
+}
+::-webkit-scrollbar-thumb:hover { background: #4c535e; background-clip: padding-box; }
+/* Угол между вертикальной и горизонтальной полосой: по умолчанию он остаётся
+   светлым квадратом даже когда обе полосы перекрашены. */
+::-webkit-scrollbar-corner { background: transparent; }
+
+/* ------------------------------------------------------------- иконки */
+
+/* Раньше значки были юникод-глифами: ◆ ▦ ◈ ＋ ⌫ ▣ ⌖ ✥ ⟳ ◐ ⛶. Они берутся
+   из системного шрифта, и у каждого своя ширина, вес и базовая линия — ряд
+   кнопок с ними не выстраивается ни по одной оси. Теперь это SVG из одного
+   набора (icons.js): общая сетка 24, общая толщина штриха, общий цвет
+   через currentColor. */
+.icon {
+  width: 16px; height: 16px;
+  flex: 0 0 auto;
+  display: block;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  /* Штрих не должен худеть при масштабировании значка: 1.6 задано в системе
+     координат 24×24 и при отрисовке в 16px превратилось бы в 1.07. */
+  vector-effect: non-scaling-stroke;
+}
+.icon-sm { width: 13px; height: 13px; }
+.icon-lg { width: 20px; height: 20px; }
+.icon-xl { width: 28px; height: 28px; }
+/* Заливка вместо штриха — для значков состояния (отмеченная звезда). */
+.icon-fill { fill: currentColor; stroke: none; }
+
+/* ------------------------------------------------------------- кнопки */
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: var(--sp-3);
+  height: var(--h); padding: 0 10px;
+  border-radius: var(--r-1); cursor: pointer;
+  background: var(--s-2); border: 1px solid var(--line); color: var(--text);
+  font: inherit; font-size: var(--t-sm); white-space: nowrap;
+  transition: background var(--tap), border-color var(--tap), color var(--tap);
+}
+.btn:hover { background: var(--s-3); border-color: var(--line-2); }
+.btn:active { background: var(--s-4); }
+.btn[disabled] { opacity: .4; cursor: default; pointer-events: none; }
+
+.btn.primary {
+  background: var(--accent-lo); border-color: var(--accent);
+  color: #fff; height: var(--h-lg); font-size: var(--t-base);
+}
+.btn.primary:hover { background: var(--accent); border-color: var(--accent-hi); }
+.btn.primary:active { background: var(--accent-lo); }
+
+.btn.danger { color: var(--danger); border-color: var(--danger-line); background: var(--danger-soft); }
+.btn.danger:hover { background: rgba(242, 114, 111, .2); border-color: var(--danger); }
+
+.btn.small { height: var(--h-sm); padding: 0 8px; font-size: var(--t-micro); }
+/* Кнопка без рамки — для рядов действий внутри карточки, где рамка у каждой
+   превращает карточку в сетку. */
+.btn.ghost { background: transparent; border-color: transparent; color: var(--text-2); }
+.btn.ghost:hover { background: var(--s-3); color: var(--text); }
+/* Квадратная: ширина равна высоте, значок по центру. */
+.btn.sq { width: var(--h); padding: 0; }
+.btn.small.sq { width: var(--h-sm); }
+
+/* ------------------------------------------------- сегментный переключатель */
+
+/* Один из двух-трёх взаимоисключающих режимов. Отдельные кнопки для этого
+   не годятся: по ним не видно, что выбор один, — а именно это и есть
+   содержание элемента. */
+.seg {
+  display: inline-flex; padding: 2px; gap: 2px;
+  background: var(--s-1); border: 1px solid var(--line); border-radius: var(--r-1);
+}
+.seg > button {
+  display: inline-flex; align-items: center; gap: var(--sp-3);
+  height: 22px; padding: 0 10px;
+  background: transparent; border: none; border-radius: 2px;
+  color: var(--text-2); font: inherit; font-size: var(--t-sm); cursor: pointer;
+  transition: background var(--tap), color var(--tap);
+}
+.seg > button:hover { color: var(--text); background: var(--s-2); }
+.seg > button.active { background: var(--s-4); color: var(--text); }
+/* Недоступный режим гасится, но остаётся на месте: исчезнувшая кнопка
+   читается как «поломалось», а погашенная — как «сейчас нельзя».
+   Так выключается 3D, когда не поднялся WebGL (app.js). */
+.seg > button[disabled] { opacity: .35; pointer-events: none; }
+
+/* --------------------------------------------------------------- поля */
+
+.field, input[type="search"], input[type="text"], input[type="number"], select, textarea {
+  height: var(--h); padding: 0 8px;
+  background: var(--s-0); border: 1px solid var(--line); border-radius: var(--r-1);
+  color: var(--text); font: inherit; font-size: var(--t-sm);
+  transition: border-color var(--tap);
+}
+textarea { height: auto; padding: 7px 9px; line-height: 1.55; resize: vertical; }
+select { cursor: pointer; padding-right: 4px; }
+input:hover, select:hover, textarea:hover { border-color: var(--line-2); }
+input:focus, select:focus, textarea:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+input::placeholder { color: var(--text-3); }
+input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); cursor: pointer; }
+input[type="range"] { accent-color: var(--accent); cursor: pointer; height: 15px; padding: 0; }
+
+/* Поле поиска: системный крестик очистки в Chromium светлый и квадратный,
+   в тёмной строке он единственная белая деталь. */
+input[type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none; appearance: none;
+  width: 11px; height: 11px; cursor: pointer;
+  background: var(--text-3);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 6l12 12M18 6L6 18' stroke='%23000' stroke-width='2.4' stroke-linecap='round' fill='none'/%3E%3C/svg%3E") center/contain no-repeat;
+}
+input[type="search"]::-webkit-search-cancel-button:hover { background: var(--text); }
+
+/* --------------------------------------------------------------- панели */
+
+/* Заголовок дока. В движках он несёт две вещи сразу: имя панели и границу,
+   по которой видно, где панель начинается. Поэтому нижняя рамка — часть
+   заголовка, а не отдельное правило у содержимого. */
+.dock-head {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: var(--sp-3);
+  height: 27px; padding: 0 var(--sp-5);
+  border-bottom: 1px solid var(--line);
+  background: var(--s-1);
+  font-size: var(--t-label); text-transform: uppercase; letter-spacing: .07em;
+  color: var(--text-2); user-select: none;
+}
+.dock-head .spacer { flex: 1 1 auto; }
+.dock-head .num { font-family: var(--mono); letter-spacing: 0; color: var(--text-3); }
+
+/* Заголовок группы свойств внутри инспектора — на ступень тише заголовка
+   дока: он делит содержимое, а не отделяет панель. */
+.group-head {
+  display: flex; align-items: center; gap: var(--sp-3);
+  font-size: var(--t-label); text-transform: uppercase; letter-spacing: .07em;
+  color: var(--text-3); user-select: none;
+  margin: var(--sp-6) 0 var(--sp-4);
+}
+.group-head::after {
+  content: ""; flex: 1 1 auto; height: 1px; background: var(--line);
+}
+.group-head:first-child { margin-top: 0; }
+
+/* --------------------------------------------------------------- значки */
+
+.tag {
+  display: inline-flex; align-items: center;
+  padding: 1px 6px; border-radius: var(--r-1);
+  background: var(--s-3); color: var(--text-2);
+  font-family: var(--mono); font-size: var(--t-micro); line-height: 1.5;
+}
+.tag.ok { background: var(--ok-soft); color: var(--ok); }
+.tag.warn { background: var(--warn-soft); color: var(--warn); }
+.tag.bad { background: var(--danger-soft); color: var(--danger); }
+.tag.accent { background: var(--accent-soft); color: var(--accent); }
+
+/* Значения, которые копируют руками: id модели, путь, число полигонов.
+   Выделение мышью здесь осмысленно, в остальном интерфейсе — нет. */
+.pick-text { user-select: text; }
+
+/* -------------------------------------------------------------- мелочи */
+
+.mono { font-family: var(--mono); }
+.muted { color: var(--text-2); }
+.dim { color: var(--text-3); }
+.spacer { flex: 1 1 auto; }
+
+/* Разделитель в ряду кнопок: показывает, что дальше идёт другая группа
+   инструментов. В движках это единственный способ читать длинную панель. */
+.sep { width: 1px; align-self: stretch; margin: 4px 2px; background: var(--line); }

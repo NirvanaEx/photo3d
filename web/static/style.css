@@ -1,110 +1,100 @@
-:root {
-  --bg: #0e0f12;
-  --panel: #16181d;
-  --panel-2: #1c1f26;
-  --line: #262a33;
-  --text: #e6e8ec;
-  --muted: #8b93a3;
-  --accent: #6ea8fe;
-  --ok: #4ade80;
-  --warn: #fbbf24;
-  --mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+/* Раздел «Просмотр»: три дока в ряд — список моделей, вьюпорт, инспектор.
+   Токены (цвета, кегли, скругления, высоты) берутся из theme.css, оболочка
+   и остальные разделы — в nav.css. Здесь только вьюпорт и то, что вокруг
+   него. */
+
+/* --------------------------------------------------------------- раскладка */
+
+/* Ширины доков — переменные, потому что их тянут мышью: shell.js правит
+   --dock-l и --dock-r на корне, а не ставит width каждой панели. Так граница
+   и панель не расходятся, пока идёт перетаскивание. */
+#view-viewer {
+  display: grid;
+  grid-template-columns: var(--dock-l, 260px) 5px minmax(0, 1fr) 5px var(--dock-r, 300px);
+  min-height: 0;
 }
 
-* { box-sizing: border-box; }
-
-/* Атрибут hidden обязан побеждать любой display из правил ниже.
-   Иначе .lightbox{display:grid} держит чёрный оверлей поверх страницы
-   постоянно, а .viewer-empty{display:grid} — надпись поверх модели. */
-[hidden] { display: none !important; }
-
-html, body {
-  margin: 0; height: 100%;
-  background: var(--bg); color: var(--text);
-  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+/* Полоса между доками. Пять пикселей — по ней надо попасть мышью, а не
+   угадать; visual-вес при этом нулевой: видно только линию от соседней
+   панели, сама полоса прозрачна до наведения. */
+.dock-split {
+  position: relative; cursor: col-resize; background: var(--line);
+  transition: background var(--tap);
+  touch-action: none;   /* иначе на тачпаде перетаскивание уезжает в прокрутку */
 }
+.dock-split:hover, .dock-split.drag { background: var(--accent); }
+/* Зона попадания шире самой полосы: 5px точны для мыши, но промахнуться
+   на пиксель легко, а промах уводит клик во вьюпорт. */
+.dock-split::after { content: ""; position: absolute; inset: 0 -3px; }
 
-body { display: flex; flex-direction: column; }
-
-/* ---------- header ---------- */
-header {
-  flex: 0 0 auto;
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--line);
-  background: var(--panel);
-}
-.brand { display: flex; align-items: center; gap: 9px; font-weight: 600; letter-spacing: .2px; }
-.logo { color: var(--accent); font-size: 16px; }
-.head-right { display: flex; align-items: center; gap: 18px; }
-
-.toggle { display: flex; align-items: center; gap: 7px; color: var(--muted); cursor: pointer; user-select: none; }
-.toggle input { accent-color: var(--accent); cursor: pointer; }
-
-.live { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted); }
-.live .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
-.live[data-state="live"] .dot { background: var(--ok); animation: pulse 2s ease-in-out infinite; }
-.live[data-state="live"] .live-text { color: var(--ok); }
-.live[data-state="down"] .dot { background: #ef4444; }
-.live[data-state="down"] .live-text { color: #ef4444; }
-@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
-
-/* вспышка при получении обновления */
-.live.flash .dot { box-shadow: 0 0 0 6px rgba(74,222,128,.18); transition: box-shadow .1s; }
-
-/* ---------- layout ---------- */
-main { flex: 1 1 auto; display: grid; grid-template-columns: 290px 1fr; min-height: 0; }
+/* ----------------------------------------------------- список моделей */
 
 #sidebar {
-  border-right: 1px solid var(--line);
-  background: var(--panel);
-  display: flex; flex-direction: column; min-height: 0;
+  background: var(--s-1);
+  display: flex; flex-direction: column; min-height: 0; min-width: 0;
 }
-.aside-head {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 11px 14px; border-bottom: 1px solid var(--line);
-  font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted);
-}
-.count { font-family: var(--mono); }
 #list { overflow-y: auto; flex: 1 1 auto; }
 
-.empty { padding: 28px 18px; color: var(--muted); font-size: 13px; text-align: center; line-height: 1.7; }
-
-/* ---------- model card ---------- */
 .card {
-  display: grid; grid-template-columns: 54px 1fr; gap: 11px;
-  padding: 10px 12px; cursor: pointer;
+  display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 10px;
+  align-items: center;
+  padding: var(--sp-4) 10px; cursor: pointer;
   border-bottom: 1px solid var(--line);
   border-left: 2px solid transparent;
+  transition: background var(--tap);
 }
-.card:hover { background: var(--panel-2); }
-.card.active { background: var(--panel-2); border-left-color: var(--accent); }
-.card.fresh { animation: appear .5s ease; }
+.card:hover { background: var(--s-2); }
+.card.active { background: var(--accent-soft); border-left-color: var(--accent); }
+.card.fresh { animation: appear .6s ease; }
 @keyframes appear {
-  from { background: rgba(110,168,254,.16); }
+  from { background: var(--accent-soft); }
   to { background: transparent; }
 }
 .card img {
-  width: 54px; height: 54px; border-radius: 6px; object-fit: cover;
-  background: #000; border: 1px solid var(--line);
+  width: 48px; height: 48px; border-radius: var(--r-1); object-fit: cover;
+  background: #0c0d10; border: 1px solid var(--line); display: block;
 }
 .card .no-thumb {
-  width: 54px; height: 54px; border-radius: 6px; border: 1px solid var(--line);
-  display: grid; place-items: center; color: var(--muted); font-size: 18px;
+  width: 48px; height: 48px; border-radius: var(--r-1); border: 1px solid var(--line);
+  display: grid; place-items: center; color: var(--text-3);
 }
-.card-id { font-family: var(--mono); font-size: 12.5px; }
-.card-sub { color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+.card-id {
+  font-family: var(--mono); font-size: var(--t-sm);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.card-sub {
+  color: var(--text-3); font-size: var(--t-label); margin-top: 2px;
+  display: flex; align-items: center; gap: 5px;
+  overflow: hidden; white-space: nowrap;
+}
+
 .badge {
-  display: inline-block; padding: 1px 6px; border-radius: 4px;
-  background: #2a2f3a; color: var(--muted); font-size: 10.5px;
-  font-family: var(--mono); margin-right: 5px;
+  display: inline-block; padding: 0 5px; border-radius: var(--r-1);
+  background: var(--s-3); color: var(--text-2);
+  font-size: var(--t-micro); font-family: var(--mono); flex: 0 0 auto;
 }
-.badge.stub { background: #3a3320; color: var(--warn); }
+.badge.stub { background: var(--warn-soft); color: var(--warn); }
 
-/* ---------- stage ---------- */
-#stage { display: grid; grid-template-rows: 1fr auto; min-height: 0; min-width: 0; }
+/* ------------------------------------------------------------- вьюпорт */
 
-#viewer-wrap { position: relative; min-height: 0; background: #0e0f12; overflow: hidden; }
+#stage {
+  display: flex; flex-direction: column; min-height: 0; min-width: 0;
+  /* Запрос по контейнеру, а не по окну. Ширина сцены зависит не от экрана,
+     а от того, куда человек оттащил границы доков: на экране в 1280 сцена
+     бывает и 820, и 420 пикселей. Медиазапрос об этом не знает, и подписи
+     режимов налезали бы на кнопки инструментов при широком окне с раздвинутым
+     инспектором. */
+  container-type: inline-size;
+}
+
+/* Тесно — остаются одни значки. Что означает каждый, написано в title:
+   подпись прячется, подсказка нет. */
+@container (max-width: 520px) {
+  .mode-tabs .mode span { display: none; }
+  .mode-tabs .mode { padding: 0 7px; }
+}
+
+#viewer-wrap { position: relative; flex: 1 1 auto; min-height: 0; background: var(--s-0); overflow: hidden; }
 
 /* Студийная подложка: тёмная стена сверху, светлеющий пол снизу и мягкое
    пятно света под моделью. Геометрии здесь нет — model-viewer умеет
@@ -112,10 +102,10 @@ main { flex: 1 1 auto; display: grid; grid-template-columns: 290px 1fr; min-heig
 #backdrop {
   position: absolute; inset: 0; z-index: 0; pointer-events: none;
   background:
-    radial-gradient(85% 50% at 50% 90%, rgba(196,206,222,.17), rgba(0,0,0,0) 72%),
+    radial-gradient(85% 50% at 50% 90%, rgba(196, 206, 222, .16), rgba(0, 0, 0, 0) 72%),
     linear-gradient(to bottom,
-      #101218 0%, #15181e 40%,
-      #262a33 55%, #31363f 74%, #1d2027 100%);
+      #121317 0%, #171a1f 40%,
+      #272b32 55%, #31363f 74%, #1e2127 100%);
 }
 /* width/height обязательны. Canvas — замещаемый элемент: при auto-размерах
    inset:0 его НЕ растягивает, он остаётся размером своего буфера. Без этих
@@ -126,9 +116,8 @@ main { flex: 1 1 auto; display: grid; grid-template-columns: 290px 1fr; min-heig
   width: 100%; height: 100%;
 }
 #viewer-wrap.plain #grid { display: none; }
-
 #viewer-wrap.plain #backdrop { display: none; }
-#viewer-wrap.plain { background: radial-gradient(circle at 50% 40%, #1a1d24 0%, #0e0f12 70%); }
+#viewer-wrap.plain { background: radial-gradient(circle at 50% 40%, #22262d 0%, var(--s-0) 70%); }
 
 model-viewer {
   position: relative; z-index: 2;   /* поверх подложки и сетки */
@@ -138,27 +127,65 @@ model-viewer:not([src]) { visibility: hidden; }
 
 .viewer-empty {
   position: absolute; inset: 0; display: grid; place-items: center;
-  color: var(--muted); font-size: 14px; pointer-events: none;
+  color: var(--text-3); font-size: var(--t-base); pointer-events: none;
 }
 
-/* ---------- режимы просмотра ---------- */
+/* --------------------------------------------- панели поверх вьюпорта */
+
+/* Общая подложка для всего, что висит над сценой. Полупрозрачное стекло, а
+   не сплошная заливка: под панелью должно оставаться видно, что там модель,
+   иначе она читается как часть рамки окна, а не как слой над сценой. */
+.vp-bar {
+  position: absolute; top: 10px; z-index: var(--z-viewport);
+  display: flex; align-items: center; gap: var(--sp-4);
+}
+.vp-bar-left { left: 10px; }
+.vp-bar-right { right: 10px; }
+
 .mode-tabs {
-  position: absolute; left: 14px; top: 14px; z-index: 3;
-  display: flex; gap: 2px; padding: 3px; border-radius: 9px;
-  background: rgba(28,31,38,.85); border: 1px solid var(--line);
+  background: rgba(25, 27, 31, .78);
+  border-color: var(--line-2);
+  backdrop-filter: blur(8px);
 }
-.mode {
-  padding: 5px 13px; border-radius: 6px; cursor: pointer;
-  background: transparent; border: none; color: var(--muted);
-  font-size: 12.5px; font-family: inherit;
+.mode-tabs .icon { opacity: .8; }
+.mode.active .icon { opacity: 1; color: var(--accent); }
+
+.viewer-tools {
+  display: flex; align-items: center; gap: 2px; padding: 2px;
+  border-radius: var(--r-1);
+  background: rgba(25, 27, 31, .78);
+  border: 1px solid var(--line-2);
+  backdrop-filter: blur(8px);
 }
-.mode:hover { color: var(--text); }
-.mode.active { background: var(--panel-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--line); }
+.tool {
+  width: 26px; height: 22px; padding: 0;
+  display: grid; place-items: center;
+  border-radius: 2px; cursor: pointer;
+  background: transparent; color: var(--text-2); border: none;
+  transition: background var(--tap), color var(--tap);
+}
+.tool:hover { background: var(--s-3); color: var(--text); }
+.tool.off { color: var(--text-3); }
+/* Включённый режим — заливка акцентом, а не только цвет значка: по одному
+   цвету штриха в 16 пикселях состояние кнопки не прочитать. */
+.tool.on { background: var(--accent-soft); color: var(--accent); }
+
+.hint {
+  position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
+  padding: var(--sp-3) var(--sp-5); border-radius: var(--r-1); z-index: var(--z-viewport);
+  background: rgba(25, 27, 31, .88); border: 1px solid var(--line-2);
+  backdrop-filter: blur(8px);
+  color: var(--text-2); font-size: var(--t-sm); pointer-events: none;
+  max-width: 80%; text-align: center;
+}
+.hint.warn { color: var(--warn); border-color: var(--warn-line); }
+
+/* ---------------------------------------------------------- турнтейбл */
 
 #spin-stage {
   position: absolute; inset: 0; z-index: 2; display: grid; place-items: center;
   overflow: hidden; cursor: grab; touch-action: none;
-  background: #0e0f12;   /* кадры несут собственный фон, подложка тут лишняя */
+  background: var(--s-0);   /* кадры несут собственный фон, подложка тут лишняя */
 }
 #spin-stage.dragging { cursor: grabbing; }
 #spin-img {
@@ -166,81 +193,161 @@ model-viewer:not([src]) { visibility: hidden; }
   transform-origin: center center; will-change: transform;
 }
 
-.hint {
-  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
-  padding: 6px 13px; border-radius: 7px; z-index: 3;
-  background: rgba(28,31,38,.9); border: 1px solid var(--line);
-  color: var(--muted); font-size: 12px; pointer-events: none;
-  max-width: 80%; text-align: center;
-}
-.hint.warn { color: var(--warn); border-color: #4a3f22; }
+/* ------------------------------------------------------ свободная камера */
 
-.viewer-tools { position: absolute; right: 14px; top: 14px; z-index: 3; display: flex; gap: 8px; }
-.tool {
-  width: 32px; height: 32px; border-radius: 7px; cursor: pointer;
-  background: rgba(28,31,38,.85); color: var(--text);
-  border: 1px solid var(--line); font-size: 15px; line-height: 1;
-}
-.tool:hover { background: var(--panel-2); border-color: var(--accent); }
-.tool.off { color: var(--muted); }
-.tool.on { color: var(--accent); border-color: var(--accent); }
-
-/* ---------- свободная камера ---------- */
 /* Курсор-перекрестие виден только когда захват мыши не удался и обзор идёт
    перетаскиванием: при захвате курсора нет вовсе. */
 #viewer-wrap.fly { cursor: crosshair; }
 
 #fly-hud {
-  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
-  z-index: 4; display: flex; align-items: center; gap: 14px;
-  padding: 6px 13px; border-radius: 7px;
-  background: rgba(28,31,38,.9); border: 1px solid var(--line);
-  color: var(--muted); font-size: 12px; pointer-events: none;
+  position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
+  z-index: var(--z-hud); display: flex; align-items: center; gap: var(--sp-5);
+  padding: var(--sp-3) var(--sp-5); border-radius: var(--r-1);
+  background: rgba(25, 27, 31, .88); border: 1px solid var(--line-2);
+  backdrop-filter: blur(8px);
+  color: var(--text-2); font-size: var(--t-label); pointer-events: none;
   max-width: 92%; flex-wrap: wrap; justify-content: center;
 }
-#fly-hud b { color: var(--text); font-family: var(--mono); font-weight: 600; }
+.keys { display: inline-flex; align-items: center; gap: 3px; flex-wrap: wrap; }
 #fly-hud .fly-speed { color: var(--text); font-family: var(--mono); }
 #fly-hud .fly-warn { color: var(--warn); }
 
 #fly-cross {
-  position: absolute; left: 50%; top: 50%; z-index: 4;
+  position: absolute; left: 50%; top: 50%; z-index: var(--z-hud);
   width: 15px; height: 15px; margin: -8px 0 0 -8px;
-  pointer-events: none; opacity: .45;
+  pointer-events: none; opacity: .5;
 }
-#fly-cross::before, #fly-cross::after { content: ""; position: absolute; background: #e6e8ec; }
+#fly-cross::before, #fly-cross::after { content: ""; position: absolute; background: var(--text); }
 #fly-cross::before { left: 50%; top: 0; width: 1px; height: 100%; }
 #fly-cross::after { top: 50%; left: 0; height: 1px; width: 100%; }
 
-/* ---------- panel ---------- */
-#panel { border-top: 1px solid var(--line); background: var(--panel); padding: 12px 16px 14px; }
-.meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12.5px; margin-bottom: 12px; }
-.meta .k { color: var(--muted); }
-.meta .v { font-family: var(--mono); }
-.meta .v.bad { color: var(--warn); }
-.meta a { color: var(--accent); text-decoration: none; }
-.meta a:hover { text-decoration: underline; }
+/* ------------------------------------------------------------ инспектор */
 
-.strip-head {
-  font-size: 11px; text-transform: uppercase; letter-spacing: .8px;
-  color: var(--muted); margin-bottom: 8px;
+#inspector {
+  background: var(--s-1);
+  display: flex; flex-direction: column; min-height: 0; min-width: 0;
 }
-.strip { display: flex; gap: 9px; overflow-x: auto; padding-bottom: 4px; }
-.strip figure { margin: 0; flex: 0 0 auto; }
+.insp-scroll { flex: 1 1 auto; overflow-y: auto; padding: var(--sp-5); }
+
+/* Действия над моделью. Вставляются сюда из nav.js первым потомком #panel,
+   поэтому отступ снизу задан им, а не соседям. */
+.panel-actions {
+  display: flex; gap: var(--sp-2); flex-wrap: wrap;
+  padding-bottom: var(--sp-5); margin-bottom: var(--sp-2);
+  border-bottom: 1px solid var(--line);
+}
+.panel-actions .btn { flex: 1 1 auto; }
+/* Отметка — состояние модели, а не действие: звезда залита и подсвечена
+   и без наведения, иначе «отмечена» и «отметить» выглядят одинаково. */
+.panel-actions .btn.starred { color: var(--warn); border-color: var(--warn-line); background: var(--warn-soft); }
+.panel-actions .btn.starred .icon { fill: currentColor; stroke: none; }
+
+/* Свойства строками «имя — значение», как в инспекторе редактора: имя слева
+   тихим цветом, значение справа моноширинным. Разметку даёт app.js
+   (<span><span class="k">…</span><span class="v">…</span></span>), поэтому
+   здесь только раскладка строки. */
+.meta { display: flex; flex-direction: column; font-size: var(--t-sm); }
+.meta > span {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--sp-5); padding: 5px 0; min-height: 24px;
+  border-bottom: 1px solid var(--line);
+}
+.meta > span:last-child { border-bottom: none; padding-top: var(--sp-4); }
+.meta .k { color: var(--text-3); white-space: nowrap; }
+.meta .v {
+  font-family: var(--mono); color: var(--text); text-align: right;
+  user-select: text;   /* id и числа копируют руками */
+  overflow: hidden; text-overflow: ellipsis;
+}
+.meta .v.bad { color: var(--warn); }
+/* Ссылка на скачивание — единственное действие среди свойств, поэтому
+   выглядит кнопкой, а не подчёркнутым текстом в ряду цифр. */
+.meta a {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-3);
+  width: 100%; height: var(--h);
+  background: var(--s-2); border: 1px solid var(--line); border-radius: var(--r-1);
+  color: var(--text); text-decoration: none; font-size: var(--t-sm);
+  transition: background var(--tap), border-color var(--tap);
+}
+.meta a:hover { background: var(--s-3); border-color: var(--line-2); }
+
+/* Ракурсы. Сетка, а не полоса с прокруткой вбок: в узком доке горизонтальная
+   прокрутка прячет половину кадров, и о том, что они есть, приходится
+   догадываться. */
+.strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: var(--sp-4); }
+.strip figure { margin: 0; min-width: 0; }
 .strip img {
-  height: 92px; width: 92px; object-fit: cover; border-radius: 7px;
-  border: 1px solid var(--line); background: #000; cursor: zoom-in; display: block;
+  width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: var(--r-1);
+  border: 1px solid var(--line); background: #0c0d10; cursor: zoom-in; display: block;
+  transition: border-color var(--tap);
 }
 .strip img:hover { border-color: var(--accent); }
-.strip figcaption { font-size: 10.5px; color: var(--muted); text-align: center; margin-top: 4px; font-family: var(--mono); }
-
-/* ---------- lightbox ---------- */
-.lightbox {
-  position: fixed; inset: 0; background: rgba(0,0,0,.88);
-  display: grid; place-items: center; z-index: 50; cursor: zoom-out; padding: 32px;
+.strip figcaption {
+  font-size: var(--t-micro); color: var(--text-3); text-align: center;
+  margin-top: 3px; font-family: var(--mono);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.lightbox img { max-width: 100%; max-height: 100%; border-radius: 8px; }
 
-@media (max-width: 860px) {
-  main { grid-template-columns: 1fr; grid-template-rows: 190px 1fr; }
-  #sidebar { border-right: none; border-bottom: 1px solid var(--line); }
+/* ------------------------------------------------------------ лайтбокс */
+
+.lightbox {
+  position: fixed; inset: 0; background: rgba(0, 0, 0, .9);
+  display: grid; place-items: center; z-index: var(--z-lightbox);
+  cursor: zoom-out; padding: var(--sp-8);
+}
+.lightbox img { max-width: 100%; max-height: 100%; border-radius: var(--r-2); }
+
+/* --------------------------------------------------------- узкий экран */
+
+/* Инспектор уезжает вниз, а не пропадает: свойства модели и её кадры нужны
+   ровно так же, просто ложатся в строку под вьюпортом. Раскладка меняется
+   именованными областями — DOM при этом не трогается, и nav.js продолжает
+   находить #panel там же, где клал. */
+@media (max-width: 1180px) {
+  #view-viewer {
+    grid-template-columns: var(--dock-l, 260px) 5px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) 200px;
+    grid-template-areas:
+      "list  split stage"
+      "list  split insp";
+  }
+  #sidebar { grid-area: list; }
+  .dock-split[data-split="sidebar"] { grid-area: split; }
+  #stage { grid-area: stage; }
+  #inspector { grid-area: insp; border-top: 1px solid var(--line-2); }
+  .dock-split[data-split="inspector"] { display: none; }
+  /* В строке под вьюпортом свойства идут в две колонки: одна колонка на всю
+     ширину экрана превращает список в редкие строки с пустотой посередине.
+
+     Области названы явно, а не отданы автоматической расстановке: порядок в
+     разметке — заголовок, содержимое, заголовок, содержимое, и автомат
+     поставил бы «Ракурсы» рядом со свойствами, а не над кадрами. */
+  #panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      "acts acts"
+      "hm   hv"
+      "meta views";
+    column-gap: var(--sp-6);
+    align-content: start;
+  }
+  .panel-actions { grid-area: acts; }
+  .gh-model { grid-area: hm; }
+  .meta { grid-area: meta; }
+  .gh-views { grid-area: hv; }
+  .strip { grid-area: views; }
+  .group-head { margin-top: var(--sp-5); }
+}
+
+@media (max-width: 900px) {
+  #view-viewer {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 168px minmax(0, 1fr) 190px;
+    grid-template-areas: "list" "stage" "insp";
+  }
+  #sidebar { border-bottom: 1px solid var(--line-2); }
+  .dock-split { display: none; }
+  /* Две колонки в 900 пикселях уже не колонки, а два узких столбца текста. */
+  #panel { display: block; }
 }

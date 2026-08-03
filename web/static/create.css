@@ -1,0 +1,171 @@
+/* Раздел «Создать». Токены и примитивы (кнопки, поля) — из theme.css,
+   здесь только то, чего там нет. Классы с приставкой cr-, чтобы правки в
+   этом файле заведомо не задевали ни библиотеку, ни вьюер. */
+
+.cr-grid {
+  display: grid;
+  /* Два столбца: работа слева, очередь справа. Очередь уже — она читается
+     сверху вниз и длинных строк не содержит. */
+  grid-template-columns: minmax(0, 1.25fr) minmax(300px, .75fr);
+  gap: var(--sp-8);
+  align-items: start;
+}
+/* На узком экране столбцы складываются: очередь уезжает под работу, а не
+   сжимается в нечитаемую полосу. */
+@media (max-width: 900px) {
+  .cr-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+.cr-col { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; }
+
+/* Утилита .dim из theme.css задаёт только цвет — кегль там ей задавать
+   нечем: она общая, а «тише» в карточке задания и в подписи под зоной
+   приёма — разный размер. Здесь второй голос этого раздела. */
+.cr-drop .dim, .cr-picked .dim, .cr-actions .dim, .cr-foot,
+.cr-job-head .dim, .cr-warns .dim, .cr-worker .dim { font-size: var(--t-sm); }
+
+/* Шаг. Номер в кружке, а не «1 ·» текстом: цифра, набранная тем же кеглем,
+   что и подпись, читается как часть подписи, и порядок шагов пропадает. */
+.cr-step {
+  display: flex; align-items: center; gap: var(--sp-3);
+  font-size: var(--t-label); text-transform: uppercase; letter-spacing: .08em;
+  color: var(--text-3); margin-top: var(--sp-5);
+}
+.cr-col > .cr-step:first-child { margin-top: 0; }
+.cr-num {
+  display: grid; place-items: center; flex: 0 0 auto;
+  width: 17px; height: 17px; border-radius: 50%;
+  background: var(--s-3); color: var(--text-2);
+  font-family: var(--mono); font-size: var(--t-micro); letter-spacing: 0;
+}
+
+/* ------------------------------------------------------------ приём файла */
+
+.cr-drop {
+  border: 1px dashed var(--line-2); border-radius: var(--r-2);
+  padding: var(--sp-8) var(--sp-6);
+  text-align: center; cursor: pointer; background: var(--s-1);
+  display: grid; gap: var(--sp-3); justify-items: center;
+  transition: border-color var(--tap), background var(--tap), color var(--tap);
+}
+.cr-drop .icon { color: var(--text-3); transition: color var(--tap); }
+.cr-drop:hover { border-color: var(--text-3); background: var(--s-2); }
+.cr-drop:hover .icon { color: var(--text-2); }
+/* Подсветка во время перетаскивания. Без неё непонятно, поймала ли страница
+   файл: курсор с плюсом рисует система, и он бывает над чем угодно. */
+.cr-drop.over { border-color: var(--accent); background: var(--accent-soft); border-style: solid; }
+.cr-drop.over .icon { color: var(--accent); }
+.cr-drop.busy { opacity: .55; pointer-events: none; }
+
+.cr-picked {
+  display: flex; gap: var(--sp-5); align-items: center;
+  background: var(--s-1); border: 1px solid var(--line);
+  border-radius: var(--r-2); padding: var(--sp-4);
+}
+.cr-picked img {
+  width: 80px; height: 80px; object-fit: cover; border-radius: var(--r-1);
+  background: #0c0d10; border: 1px solid var(--line); flex: 0 0 auto;
+}
+.cr-name { font-family: var(--mono); font-size: var(--t-sm); word-break: break-all; user-select: text; }
+
+.cr-actions { display: flex; gap: var(--sp-5); align-items: center; flex-wrap: wrap; }
+
+/* --------------------------------------------------------- разбор кадра */
+
+.cr-report {
+  display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: var(--sp-6);
+  background: var(--s-1); border: 1px solid var(--line);
+  border-radius: var(--r-2); padding: var(--sp-5);
+}
+@media (max-width: 700px) {
+  .cr-report { grid-template-columns: minmax(0, 1fr); }
+}
+/* Силуэт на шахматке рисует сам сервер (pipeline/preprocess.py): на сплошном
+   фоне не отличить край предмета от дырки в маске. Здесь только рамка. */
+.cr-report img {
+  width: 100%; border-radius: var(--r-1); background: #0c0d10;
+  border: 1px solid var(--line); display: block;
+}
+.cr-measures { display: flex; flex-direction: column; align-content: start; }
+.cr-row {
+  display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-5);
+  font-size: var(--t-sm); border-bottom: 1px solid var(--line); padding: 4px 0;
+}
+.cr-row span { color: var(--text-3); }
+.cr-row b { font-family: var(--mono); font-weight: 500; text-align: right; }
+
+.cr-warns { grid-column: 1 / -1; }
+.cr-warn-title {
+  font-size: var(--t-label); text-transform: uppercase; letter-spacing: .08em;
+  color: var(--warn); margin-bottom: var(--sp-3);
+}
+.cr-warn { font-size: var(--t-sm); line-height: 1.65; color: var(--text-2); }
+
+/* ----------------------------------------------------------- настройки */
+
+.cr-form {
+  display: grid; gap: var(--sp-5);
+  background: var(--s-1); border: 1px solid var(--line);
+  border-radius: var(--r-2); padding: var(--sp-5);
+}
+.cr-form label {
+  display: grid; gap: var(--sp-2);
+  font-size: var(--t-label); text-transform: uppercase; letter-spacing: .07em;
+  color: var(--text-3);
+}
+.cr-form select, .cr-form input[type="number"] { width: 100%; }
+.cr-seed { display: flex; gap: var(--sp-3); }
+.cr-seed input { flex: 1 1 auto; min-width: 0; }
+.cr-form .btn.primary { margin-top: var(--sp-2); }
+
+/* -------------------------------------------------------------- очередь */
+
+.cr-worker {
+  display: flex; align-items: center; gap: var(--sp-3); font-size: var(--t-sm);
+  background: var(--s-1); border: 1px solid var(--line);
+  border-radius: var(--r-2); padding: var(--sp-4) var(--sp-5);
+  color: var(--text-2);
+}
+.cr-worker .dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--text-3);
+  flex: 0 0 auto;
+}
+.cr-worker .dot.ok { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
+.cr-worker .dot.off { background: var(--text-3); }
+
+.cr-queue { display: grid; gap: var(--sp-4); }
+
+.cr-job {
+  background: var(--s-1); border: 1px solid var(--line);
+  border-radius: var(--r-2); padding: var(--sp-4) var(--sp-5); display: grid; gap: var(--sp-3);
+  /* Цветом помечается ЛЕВЫЙ край, а не вся карточка: заливка спорила бы с
+     миниатюрами и читалась бы как выделение. */
+  border-left: 2px solid var(--line-2);
+}
+.cr-job.run { border-left-color: var(--accent); }
+.cr-job.ok { border-left-color: var(--ok); }
+.cr-job.bad { border-left-color: var(--danger); }
+.cr-job.wait { border-left-color: var(--warn); }
+.cr-job.off { opacity: .6; }
+
+.cr-job-head { display: flex; align-items: center; gap: var(--sp-4); font-size: var(--t-sm); }
+.cr-job-head b {
+  font-weight: 500; min-width: 0; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+
+.cr-badge {
+  font-size: var(--t-micro); padding: 1px 7px; border-radius: var(--r-pill);
+  border: 1px solid var(--line); background: var(--s-2); color: var(--text-2);
+  flex: 0 0 auto;
+}
+.cr-badge.run { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+.cr-badge.ok { color: var(--ok); border-color: var(--ok-line); background: var(--ok-soft); }
+.cr-badge.bad { color: var(--danger); border-color: var(--danger-line); background: var(--danger-soft); }
+.cr-badge.wait { color: var(--warn); border-color: var(--warn-line); background: var(--warn-soft); }
+
+.cr-job-stage { font-size: var(--t-label); color: var(--text-2); font-family: var(--mono); }
+.cr-err { font-size: var(--t-sm); line-height: 1.6; color: #f6bebc; }
+.cr-job-foot { display: flex; gap: var(--sp-3); flex-wrap: wrap; }
+
+.cr-foot { line-height: 1.7; margin-top: var(--sp-2); }

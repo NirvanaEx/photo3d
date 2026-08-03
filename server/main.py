@@ -9,8 +9,12 @@ API спроектирован под работу агента, а не чел�
    может только пересказывать чужие цифры вместо оценки результата.
 3. Адресация короткими id, а по умолчанию - "last". Чаще всего речь о той
    модели, что только что сделали.
-4. Вызов блокирующий, без очередей и опроса статуса. Подождать 60 секунд
-   дешевле, чем жечь ходы на polling.
+4. Вызов блокирующий, опрашивать статус не надо. Подождать 60 секунд дешевле,
+   чем жечь ходы на polling. Тяжёлое при этом считает не этот процесс, а
+   воркер (server/jobs.py): исполнителем должен быть не только агент, но и
+   человек за веб-интерфейсом, а видеокарта одна на двоих. Очередь снаружи не
+   видна - кроме того, что ждать иногда приходится дольше, если впереди стоит
+   чужое задание. Кто именно стоит, показывает list_jobs.
 5. Ошибка несёт подсказку, что делать дальше, а не traceback.
 """
 from __future__ import annotations
@@ -30,8 +34,7 @@ from pipeline import bake
 from pipeline import paint as paint_mod
 from pipeline import smooth as smooth_mod
 from pipeline import preprocess, render, sculpt
-from pipeline.engines import get_engine
-from server import config
+from server import config, jobs
 from server.errors import InputNotFound, PipelineError
 from server.store import ModelStore
 
@@ -154,6 +157,50 @@ def _view_images(model_id: str, limit: int = config.DEFAULT_VIEWS) -> list[Image
     return [Image(path=str(p)) for p in picked]
 
 
+async def _run_job(kind: str, args: dict, title: str = "") -> dict:
+    """Поставить задание в очередь и дождаться его конца.
+
+    Снаружи инструмент от этого не меняется: вызов как был блокирующим, так и
+    остался, опрашивать статус не надо. Меняется то, КТО считает. Работа ушла
+    в отдельный процесс-воркер, и это нужно ровно затем, чтобы считать умел не
+    только агент: то же задание кладёт веб-интерфейс, когда кнопку нажимает
+    человек. Видеокарта одна, и очередь - единственное, что мешает двоим
+    запустить генерацию одновременно и упереться обоим.
+
+    Ждать иногда придётся дольше прежнего: если впереди стоит чужое задание,
+    своё начнётся после него. Это честная цена совместной работы, и она
+    видна - list_jobs показывает, кто занял очередь.
+    """
+    # Исполнителя поднимаем сами. Требовать «сначала запусти воркер» нельзя:
+    # до очереди генерация шла одним вызовом, и любой такой шаг сломал бы всё,
+    # что уже работает. Подъём занимает пару секунд и делается один раз.
+    st = await anyio.to_thread.run_sync(jobs.ensure_worker)
+    if not st.get("alive"):
+        raise PipelineError(
+            "очередь", "исполнитель заданий не поднялся", jobs.worker_hint())
+
+    job = jobs.submit(kind, args, by="agent", title=title)
+    done = await jobs.wait_async(job["id"], timeout=config.JOB_WAIT_SEC)
+    state = done.get("state")
+
+    if state == jobs.DONE:
+        return done
+    if state == jobs.FAILED:
+        err = done.get("error", {})
+        raise PipelineError(err.get("stage", kind),
+                            err.get("reason", "причина не записана"),
+                            err.get("hint", ""))
+    if state == jobs.CANCELLED:
+        raise PipelineError("очередь", f"задание {job['id']} отменено",
+                            "поставь заново, если отмена была случайной")
+    raise PipelineError(
+        "очередь",
+        f"задание {job['id']} не закончилось за {config.JOB_WAIT_SEC} с "
+        f"(состояние: {state}, этап: {done.get('stage')})",
+        f"посмотри list_jobs() и {jobs.WORKER_LOG}; само задание при этом "
+        f"продолжает считаться, ждать его снова не нужно")
+
+
 # --------------------------------------------------------------------------- #
 # Инструменты
 # --------------------------------------------------------------------------- #
@@ -224,8 +271,12 @@ async def photo_to_3d(
     посмотри на них и реши, годится ли результат.
 
     Идёт около четырёх с половиной минут вместе с постановочным рендером
-    оборота. Вызов
-    блокирующий, опрашивать статус не надо.
+    оборота. Вызов блокирующий, опрашивать статус не надо.
+
+    Считает задание отдельный процесс-воркер, а не этот: ту же очередь
+    занимает человек, когда нажимает кнопку в веб-интерфейсе. Если впереди
+    стоит чужое задание, своё начнётся после него - тогда вызов тянется
+    дольше. Кто занял очередь, показывает list_jobs.
 
     image: имя файла в data/input, либо полный путь (в том числе D:\\папка\\фото.jpg)
            Фон снимать заранее не нужно, но если у картинки уже есть
@@ -247,35 +298,15 @@ async def photo_to_3d(
            пишется всегда - по нему крутится модель в веб-интерфейсе
     """
     src = _resolve_input(image)
-    model_id, mdir = store.create()
-    started = time.time()
+    done = await _run_job("photo_to_3d",
+                          {"image": str(src), "mode": mode, "seed": seed},
+                          title=src.name)
 
-    shutil.copy2(src, mdir / f"input{src.suffix.lower()}")
-    store.log(model_id, f"источник: {src}")
-
-    engine = get_engine(config.ENGINE)
-    glb = mdir / "model.glb"
-
-    def _work():
-        stats = engine.generate(src, glb, seed=seed, mode=mode)
-        frames, rengine, log = render.render_turntable(
-            glb, mdir / "views", views=config.SPIN_FRAMES, res=config.PREVIEW_RES
-        )
-        return stats, frames, rengine, log
-
-    stats, frames, rengine, blog = await anyio.to_thread.run_sync(_work)
-    store.log(model_id, blog)
-
-    store.write_meta(model_id, {
-        "source": str(src),
-        "stats": stats,
-        "elapsed_sec": time.time() - started,
-        "render_engine": rengine,
-        "views": len(frames),
-    })
+    model_id = done["result"]["model_id"]
+    stats = done["result"].get("stats", {})
 
     note = ""
-    if engine.needs_gpu is False and stats.get("engine") == "stub":
+    if stats.get("engine") == "stub":
         note = (
             "\n\nЭто ЗАГЛУШКА: силуэт фотографии надут в объём, реальной "
             "реконструкции нет. Она нужна, чтобы проверить работу всей цепочки. "
@@ -549,6 +580,52 @@ def list_models(limit: int = 10) -> str:
             f"{mid}  {s.get('engine', '?'):8s} {s.get('faces', '?'):>8} полиг.  {src}"
         )
     return f"всего моделей: {len(store.ids())}\n" + "\n".join(rows)
+
+
+@mcp.tool(annotations=READ_ONLY)
+def list_jobs(limit: int = 10) -> str:
+    """Очередь заданий: что считается сейчас и что ждёт.
+
+    Нужен потому, что исполнителей теперь двое. Человек за веб-интерфейсом
+    ставит задания в ту же очередь, что и я, и видеокарта у нас одна.
+    Прежде чем запускать своё, стоит посмотреть, не занята ли она чужим:
+    иначе мой вызов просто отстоит в очереди лишние несколько минут.
+
+    Столбец «кто» и говорит, чьё задание: human - человек нажал кнопку,
+    agent - поставил я.
+    """
+    st = jobs.worker_status()
+    head = (f"исполнитель: работает (pid {st.get('pid')}, "
+            f"движок {st.get('engine', '?')})"
+            if st.get("alive") else
+            "исполнитель: не запущен — поднимется сам при следующем задании")
+    if st.get("alive") and st.get("engine") not in (None, config.ENGINE):
+        # Расхождение показываем вслух: молча оно проявится только тем, что
+        # модели вдруг станут заглушками.
+        head += (f"\n! он поднят с чужим движком (у меня {config.ENGINE}) — "
+                 f"задания он отклонит, останови его: kill {st.get('pid')}")
+
+    items = jobs.listing(limit=limit)
+    if not items:
+        return head + "\nочередь пуста"
+
+    rows = []
+    now = time.time()
+    for j in items:
+        state = j.get("state", "?")
+        if state == jobs.RUNNING:
+            age = f"идёт {now - j.get('started', now):.0f} c"
+        elif state == jobs.QUEUED:
+            age = f"ждёт {now - j.get('created', now):.0f} c"
+        else:
+            age = f"{now - j.get('finished', now):.0f} c назад"
+        mid = j.get("model_id") or (j.get("result") or {}).get("model_id") or ""
+        tail = j.get("error", {}).get("reason", "") if state == jobs.FAILED else mid
+        rows.append(f"{j['id']}  {state:9s} {j.get('by', '?'):6s} "
+                    f"{j.get('kind', '?'):14s} {j.get('stage', ''):22s} "
+                    f"{age:14s} {tail}")
+    active = len([j for j in items if j.get("state") in (jobs.QUEUED, jobs.RUNNING)])
+    return f"{head}\nв работе и в очереди: {active}\n" + "\n".join(rows)
 
 
 @mcp.tool(annotations=GENERATES)
@@ -896,6 +973,18 @@ def status() -> str:
         f"Godot:            {config.GODOT} "
         f"({'найден' if config.GODOT.exists() else 'НЕ НАЙДЕН'})",
     ]
+
+    # Исполнитель заданий. Его отсутствие само по себе не беда - он поднимется
+    # при первом задании, - а вот занятая очередь объясняет, почему вызов
+    # тянется дольше обычного, и знать об этом надо до того, как искать
+    # причину в видеокарте.
+    w = jobs.worker_status()
+    busy = jobs.active()
+    lines.append(
+        f"исполнитель:      "
+        + (f"работает, pid {w.get('pid')}" if w.get("alive")
+           else "не запущен (поднимется сам)")
+        + (f", в очереди {len(busy)}" if busy else ", очередь пуста"))
 
     if config.ENGINE == "trellis":
         lines.append("")

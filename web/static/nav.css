@@ -1,258 +1,390 @@
-/* Навигация, главная и корзина.
+/* Оболочка приложения и разделы «Главная»/«Корзина»: панель разделов,
+   верхняя панель, строка состояния, плитки сводки, карточки библиотеки,
+   диалог, всплывающие сообщения.
+
    Лежит отдельно от style.css по той же причине, что и nav.js: над вьюером
    идут параллельные правки, и два файла не задевают друг друга.
 
-   Подключается ПОСЛЕ style.css и переопределяет раскладку оболочки: раньше
-   страница была «шапка + рабочая область», теперь слева добавилась панель.
-   Переменные цветов берутся оттуда же, своей палитры здесь нет. */
-
-:root {
-  --danger: #f87171;
-  --rail: 196px;
-}
+   Цвета, кегли, скругления и высоты берутся из theme.css. Своих значений
+   здесь нет — если тянет вписать хекс, значит не хватает токена, и заводить
+   его надо там. */
 
 /* ------------------------------------------------------------- оболочка */
 
-/* Было flex-direction: column. Панель встаёт слева, поэтому строка. */
-body { flex-direction: row; }
+/* Панель разделов слева, поэтому строка. Дальше #content разворачивает
+   содержимое в столбец: верхняя панель, разделы, строка состояния. */
+body { display: flex; flex-direction: row; }
+
+/* Пока тянут границу дока, курсор обязан оставаться «изменением размера»
+   над всей страницей, а выделение — не срабатывать. Иначе быстрое движение
+   выделяет подписи в списке моделей, и перетаскивание выглядит поломкой. */
+body.resizing { cursor: col-resize; user-select: none; }
+body.resizing * { cursor: col-resize !important; }
+
+/* --------------------------------------------------------- панель разделов */
 
 #rail {
   flex: 0 0 var(--rail);
+  width: var(--rail);
   display: flex; flex-direction: column;
-  background: var(--panel);
-  border-right: 1px solid var(--line);
+  background: var(--s-1);
+  border-right: 1px solid var(--line-2);
   min-height: 0;
+  /* Перехода по ширине здесь нарочно нет, хотя сворачивание так и просит
+     анимации. Причина не вкусовая: пока таблицы догружаются, var(--rail)
+     ещё не определена, flex-basis откатывается к auto (это ширина значка,
+     48px), а появление переменной читается как смена значения и запускает
+     переход. В окне, которое не композитит кадры (свёрнутая панель, фоновая
+     вкладка), переход не продвигается и застревает на 48 пикселях — панель
+     остаётся сложенной без всякой на то причины. Проверено: снимаешь
+     transition, ширина немедленно становится верной.
+     Доки в редакторах и без того меняют размер мгновенно. */
 }
+body.rail-min #rail { flex-basis: var(--rail-min); width: var(--rail-min); }
+
 #rail .brand {
-  display: flex; align-items: center; gap: 9px;
-  padding: 14px 16px 12px;
-  font-weight: 600; letter-spacing: .2px;
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: var(--sp-4);
+  height: var(--bar); padding: 0 var(--sp-5);
   border-bottom: 1px solid var(--line);
+  font-weight: 600; letter-spacing: .01em;
+  user-select: none; overflow: hidden;
 }
-#rail .logo { color: var(--accent); font-size: 16px; }
+#rail .logo { color: var(--accent); display: flex; flex: 0 0 auto; }
+#rail .brand-name { flex: 1 1 auto; white-space: nowrap; }
 
-#nav { padding: 8px; display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; }
+/* Кнопка сворачивания. Видна по наведению на шапку: постоянно висящая
+   стрелка в углу — деталь, на которую смотрят каждый раз заново, а
+   пользуются ей дважды за всё время. */
+.rail-toggle {
+  flex: 0 0 auto;
+  width: 22px; height: 22px; padding: 0;
+  display: grid; place-items: center;
+  background: transparent; border: none; border-radius: var(--r-1);
+  color: var(--text-3); cursor: pointer;
+  opacity: 0; transition: opacity var(--tap), color var(--tap), background var(--tap);
+}
+#rail .brand:hover .rail-toggle, .rail-toggle:focus-visible { opacity: 1; }
+.rail-toggle:hover { background: var(--s-3); color: var(--text); }
+
+#nav { padding: var(--sp-3); display: flex; flex-direction: column; gap: 1px; flex: 1 1 auto; }
+
 .nav-item {
-  display: flex; align-items: center; gap: 10px;
-  padding: 9px 10px; border-radius: 8px; cursor: pointer;
-  background: transparent; border: none; color: var(--muted);
-  font: inherit; font-size: 13.5px; text-align: left; width: 100%;
+  display: flex; align-items: center; gap: var(--sp-4);
+  height: 30px; padding: 0 var(--sp-4);
+  border-radius: var(--r-1); cursor: pointer;
+  background: transparent; border: none; color: var(--text-2);
+  font: inherit; font-size: var(--t-base); text-align: left; width: 100%;
+  position: relative;
+  transition: background var(--tap), color var(--tap);
 }
-.nav-item:hover { background: var(--panel-2); color: var(--text); }
-.nav-item.active { background: var(--panel-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--line); }
+.nav-item:hover { background: var(--s-2); color: var(--text); }
+.nav-item.active { background: var(--accent-soft); color: var(--text); }
+/* Выделение активного — полоса у левого края, а не заливка целиком.
+   В доке со списком разделов это единственный способ отличить «здесь я
+   сейчас» от «сюда навёл мышь»: заливка занята наведением. */
+.nav-item.active::before {
+  content: ""; position: absolute; left: 0; top: 5px; bottom: 5px;
+  width: 2px; border-radius: 0 2px 2px 0; background: var(--accent);
+}
 .nav-item.active .nav-icon { color: var(--accent); }
-.nav-icon { width: 18px; text-align: center; font-size: 14px; }
-.nav-label { flex: 1 1 auto; }
+
+.nav-icon { display: flex; flex: 0 0 auto; color: var(--text-3); }
+.nav-item:hover .nav-icon { color: var(--text-2); }
+.nav-label { flex: 1 1 auto; white-space: nowrap; overflow: hidden; }
+
 .nav-badge {
-  font-family: var(--mono); font-size: 11px; color: var(--muted);
-  background: #2a2f3a; border-radius: 10px; padding: 1px 7px;
+  flex: 0 0 auto;
+  font-family: var(--mono); font-size: var(--t-micro); color: var(--text-2);
+  background: var(--s-3); border-radius: var(--r-pill); padding: 1px 6px;
+}
+.nav-item.active .nav-badge { background: var(--accent-soft); color: var(--accent); }
+
+/* Свёрнутая панель: остаются одни значки. Счётчик превращается в точку —
+   цифра в 48 пикселях ширины не читается, а знать, что там что-то есть,
+   всё равно нужно. */
+body.rail-min .nav-label,
+body.rail-min #rail .brand-name,
+body.rail-min .rail-toggle { display: none; }
+body.rail-min #rail .brand { justify-content: center; padding: 0; }
+body.rail-min .nav-item { justify-content: center; padding: 0; }
+body.rail-min .nav-badge {
+  position: absolute; right: 5px; top: 5px;
+  padding: 0; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--accent); color: transparent; overflow: hidden;
 }
 
-.rail-foot { padding: 10px 14px 12px; border-top: 1px solid var(--line); }
-.rail-stat {
-  display: flex; justify-content: space-between; align-items: baseline;
-  font-size: 12px; color: var(--muted); margin-bottom: 4px;
-}
-.rail-stat b { font-family: var(--mono); font-weight: 500; color: var(--text); }
-.rail-foot .live { margin-top: 8px; }
+/* ---------------------------------------------------------- содержимое */
 
 #content { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-.crumbs { font-size: 13.5px; color: var(--muted); }
 
-/* main перестал быть сеткой: теперь он держит разделы, а сетку вьюера
-   задаёт сам раздел. Правило из style.css (290px 1fr) при display:block
-   не работает, поэтому переносим его на #view-viewer. */
-main { display: block; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+#appbar {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: var(--sp-5);
+  height: var(--bar); padding: 0 var(--sp-5);
+  border-bottom: 1px solid var(--line-2);
+  background: var(--s-1);
+}
+.crumbs { font-size: var(--t-base); color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.head-right { display: flex; align-items: center; gap: var(--sp-6); }
+
+.toggle {
+  display: flex; align-items: center; gap: var(--sp-3);
+  color: var(--text-2); font-size: var(--t-sm); cursor: pointer; user-select: none;
+}
+.toggle:hover { color: var(--text); }
+
+main { flex: 1 1 auto; min-height: 0; overflow: hidden; }
 .view { height: 100%; min-height: 0; }
-#view-viewer { display: grid; grid-template-columns: 290px 1fr; }
+.scroll { height: 100%; overflow-y: auto; padding: var(--sp-6) var(--sp-7) var(--sp-8); }
 
-.scroll { height: 100%; overflow-y: auto; padding: 18px 20px 28px; }
+/* ------------------------------------------------------ строка состояния */
 
-/* ------------------------------------------------------------- плитки */
+#statusbar {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: var(--sp-5);
+  height: var(--status); padding: 0 var(--sp-5);
+  border-top: 1px solid var(--line-2);
+  background: var(--s-1);
+  font-size: var(--t-label); color: var(--text-3);
+  user-select: none;
+}
+#statusbar .sep { margin: 5px 0; }
+#statusbar .st { display: flex; align-items: baseline; gap: 5px; white-space: nowrap; }
+#statusbar .st b { font-family: var(--mono); font-weight: 500; color: var(--text-2); }
+#statusbar .st-hint { gap: 3px; align-items: center; }
 
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+/* Клавиши. Один вид на весь интерфейс: подсказка внизу, приглашение взять
+   управление в прогулке, строка свободной камеры. */
+kbd {
+  display: inline-block; min-width: 15px; padding: 0 4px;
+  border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: var(--r-1);
+  background: var(--s-2); color: var(--text-2);
+  font: 500 var(--t-micro)/16px var(--mono); text-align: center;
+}
+
+/* Живо ли соединение. Точка есть всегда — цвет и есть сообщение. */
+.live { display: flex; align-items: center; gap: var(--sp-3); font-size: var(--t-label); color: var(--text-3); }
+.live .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-3); flex: 0 0 auto; }
+.live[data-state="live"] .dot { background: var(--ok); animation: pulse 2.4s ease-in-out infinite; }
+.live[data-state="live"] .live-text { color: var(--ok); }
+.live[data-state="down"] .dot { background: var(--danger); }
+.live[data-state="down"] .live-text { color: var(--danger); }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+/* Вспышка при получении обновления. */
+.live.flash .dot { box-shadow: 0 0 0 5px var(--ok-soft); transition: box-shadow .1s; }
+
+/* --------------------------------------------------------- плитки сводки */
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: var(--sp-5); }
 .tile {
-  background: var(--panel); border: 1px solid var(--line);
-  border-radius: 10px; padding: 13px 15px;
+  background: var(--s-1); border: 1px solid var(--line);
+  border-radius: var(--r-2); padding: var(--sp-5) var(--sp-6);
 }
-.tile-v { font-size: 22px; font-family: var(--mono); }
-.tile-k { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .7px; margin-top: 2px; }
-.tile-s { font-size: 11.5px; color: var(--muted); margin-top: 6px; font-family: var(--mono); }
-
-/* ------------------------------------------------------------ инструменты */
-
-.toolbar { display: flex; align-items: center; gap: 12px; margin: 18px 0 12px; flex-wrap: wrap; }
-#q {
-  flex: 1 1 240px; min-width: 180px;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
-  color: var(--text); font: inherit; font-size: 13px; padding: 8px 11px;
+.tile-v { font-size: var(--t-xl); font-family: var(--mono); line-height: 1.2; }
+.tile-k {
+  font-size: var(--t-label); color: var(--text-3);
+  text-transform: uppercase; letter-spacing: .07em; margin-top: 3px;
 }
-#q:focus { outline: none; border-color: var(--accent); }
-#sort {
-  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
-  color: var(--text); font: inherit; font-size: 13px; padding: 8px 10px; cursor: pointer;
+.tile-s { font-size: var(--t-label); color: var(--text-2); margin-top: var(--sp-3); font-family: var(--mono); }
+
+/* ------------------------------------------------------------ отбор */
+
+/* Липнет к верху прокрутки: список длинный, и уехавший вверх поиск
+   заставляет мотать обратно ради каждой смены фильтра. Отрицательные поля
+   с горизонтальным padding — чтобы фон полосы доходил до краёв области, а
+   не обрывался по её отступам. */
+.toolbar {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: var(--sp-5);
+  margin: var(--sp-6) calc(var(--sp-7) * -1) var(--sp-5);
+  padding: var(--sp-4) var(--sp-7);
+  background: var(--s-0);
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
 }
 
-.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.search { position: relative; display: flex; align-items: center; flex: 1 1 260px; min-width: 190px; }
+.search .icon { position: absolute; left: 8px; color: var(--text-3); pointer-events: none; }
+#q { width: 100%; padding-left: 27px; }
+
+.pick-sort { display: flex; align-items: center; gap: var(--sp-3); color: var(--text-3); }
+
+.chips { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
 .chip {
-  padding: 5px 11px; border-radius: 20px; cursor: pointer;
-  background: var(--panel); border: 1px solid var(--line); color: var(--muted);
-  font: inherit; font-size: 12px;
+  display: inline-flex; align-items: center; gap: 5px;
+  height: var(--h); padding: 0 10px;
+  border-radius: var(--r-pill); cursor: pointer;
+  background: var(--s-2); border: 1px solid var(--line); color: var(--text-2);
+  font: inherit; font-size: var(--t-sm);
+  transition: background var(--tap), border-color var(--tap), color var(--tap);
 }
-.chip:hover { color: var(--text); }
-.chip.on { background: var(--panel-2); color: var(--text); border-color: var(--accent); }
-.chip b { font-family: var(--mono); font-weight: 500; opacity: .7; margin-left: 3px; }
+.chip:hover { color: var(--text); border-color: var(--line-2); }
+.chip.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); }
+.chip b { font-family: var(--mono); font-weight: 500; opacity: .75; }
 
 .bulk {
-  display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
-  padding: 9px 13px; border-radius: 9px;
-  background: rgba(110,168,254,.10); border: 1px solid rgba(110,168,254,.35);
-  font-size: 13px;
+  display: flex; align-items: center; gap: var(--sp-4); margin-bottom: var(--sp-5);
+  padding: var(--sp-4) var(--sp-5); border-radius: var(--r-2);
+  background: var(--accent-soft); border: 1px solid var(--accent-line);
+  font-size: var(--t-sm);
 }
-.bulk .spacer { flex: 1 1 auto; }
 
-/* ------------------------------------------------------------- карточки */
+/* ---------------------------------------------------- карточки библиотеки */
 
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(212px, 1fr)); gap: 14px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(214px, 1fr)); gap: var(--sp-5); }
 
 .gcard {
-  background: var(--panel); border: 1px solid var(--line); border-radius: 11px;
+  background: var(--s-1); border: 1px solid var(--line); border-radius: var(--r-2);
   overflow: hidden; cursor: pointer; display: flex; flex-direction: column;
-  transition: border-color .12s, transform .12s;
+  transition: border-color var(--tap), background var(--tap);
 }
-.gcard:hover { border-color: #39414f; transform: translateY(-1px); }
-.gcard.picked { border-color: var(--accent); }
-.gcard.starred { border-color: #4a4527; }
+.gcard:hover { border-color: var(--line-2); background: var(--s-2); }
+.gcard.picked { border-color: var(--accent); background: var(--accent-soft); }
+.gcard.starred { border-color: var(--warn-line); }
 .gcard.starred:hover, .gcard.picked:hover { border-color: var(--accent); }
 
-.gthumb { position: relative; aspect-ratio: 4 / 3; background: #000; }
+.gthumb { position: relative; aspect-ratio: 4 / 3; background: #0c0d10; }
 .gthumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .gthumb .no-thumb {
   width: 100%; height: 100%; display: grid; place-items: center;
-  color: var(--muted); font-size: 26px;
+  color: var(--text-3);
 }
 .gbadge {
-  position: absolute; left: 8px; bottom: 8px;
-  padding: 2px 7px; border-radius: 5px; font-family: var(--mono); font-size: 10.5px;
-  background: rgba(14,15,18,.82); color: var(--muted); border: 1px solid var(--line);
+  position: absolute; left: var(--sp-3); bottom: var(--sp-3);
+  padding: 1px 6px; border-radius: var(--r-1);
+  font-family: var(--mono); font-size: var(--t-micro);
+  background: rgba(12, 13, 16, .82); color: var(--text-2);
+  border: 1px solid var(--line); backdrop-filter: blur(3px);
 }
-.gstar { position: absolute; right: 8px; bottom: 8px; color: var(--warn); font-size: 13px; }
+.gstar {
+  position: absolute; right: var(--sp-3); bottom: var(--sp-3);
+  display: flex; color: var(--warn);
+}
+.gstar .icon { fill: currentColor; stroke: none; }
 
 /* Флажок выбора виден всегда, а не по наведению: иначе о множественном
    выборе не догадаться, а именно он и нужен, когда чистишь два десятка
    почти одинаковых попыток. */
-.pick { position: absolute; left: 7px; top: 7px; }
-.pick input { width: 17px; height: 17px; accent-color: var(--accent); cursor: pointer; }
+.pick { position: absolute; left: var(--sp-3); top: var(--sp-3); display: flex; }
+.pick input { width: 16px; height: 16px; }
 
-.gbody { padding: 10px 11px 4px; flex: 1 1 auto; }
+.gbody { padding: var(--sp-4) 10px var(--sp-2); flex: 1 1 auto; }
 .gname {
-  font-size: 13px; margin-bottom: 3px;
+  font-size: var(--t-base); margin-bottom: 2px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.gsub { font-size: 11.5px; color: var(--muted); font-family: var(--mono); }
-.gsub.dim { opacity: .8; margin-top: 1px; }
-.hot { color: var(--ok); font-family: inherit; }
+.gsub { font-size: var(--t-label); color: var(--text-2); font-family: var(--mono); }
+.gsub.dim { color: var(--text-3); margin-top: 1px; }
+.hot { color: var(--ok); font-family: var(--font); }
 .gline {
-  font-size: 11px; color: var(--muted); margin-top: 6px;
-  padding-top: 6px; border-top: 1px solid var(--line);
+  font-size: var(--t-label); color: var(--text-3); margin-top: var(--sp-3);
+  padding-top: var(--sp-3); border-top: 1px solid var(--line);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.gline code { font-family: var(--mono); color: #9fb2cc; }
+.gline code { font-family: var(--mono); color: var(--text-2); }
 
-.gacts { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 9px 9px; }
-.gact {
-  padding: 4px 8px; border-radius: 6px; cursor: pointer;
-  background: transparent; border: 1px solid var(--line); color: var(--muted);
-  font: inherit; font-size: 11.5px;
+/* Ряд действий. Кнопки без рамок: у каждой своя рамка превращает низ
+   карточки в частокол, спорящий с рамкой самой карточки. */
+.gacts {
+  display: flex; align-items: center; gap: 1px;
+  padding: var(--sp-2) var(--sp-3) var(--sp-3);
+  border-top: 1px solid var(--line);
+  margin-top: var(--sp-3);
 }
-.gact:hover { color: var(--text); border-color: #39414f; background: var(--panel-2); }
-.gact.danger:hover { color: var(--danger); border-color: #5a2b2b; }
-.gact.icon { padding: 4px 7px; }
+.gact {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: var(--h-sm); padding: 0 var(--sp-3);
+  border-radius: var(--r-1); cursor: pointer;
+  background: transparent; border: none; color: var(--text-3);
+  font: inherit; font-size: var(--t-label);
+  transition: background var(--tap), color var(--tap);
+}
+.gact:hover { color: var(--text); background: var(--s-3); }
+.gact.danger:hover { color: var(--danger); background: var(--danger-soft); }
+.gact.icon { padding: 0; width: var(--h-sm); justify-content: center; }
+/* Отмеченная звезда светится и без наведения: это состояние модели,
+   а не действие. */
+.gact.icon.on { color: var(--warn); }
+.gact.icon.on .icon { fill: currentColor; stroke: none; }
+
+.empty { padding: var(--sp-8) var(--sp-6); color: var(--text-3); font-size: var(--t-sm); text-align: center; line-height: 1.8; }
 
 /* ------------------------------------------------------------- корзина */
 
-.trash-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-.trash-title { font-size: 16px; }
-.trash-sub { font-size: 12.5px; color: var(--muted); font-family: var(--mono); margin-top: 3px; }
+.trash-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-6); }
+.trash-title { font-size: var(--t-lg); }
+.trash-sub { font-size: var(--t-sm); color: var(--text-2); font-family: var(--mono); margin-top: 2px; }
 
-/* ------------------------------------------------------------- кнопки */
-
-.btn {
-  padding: 6px 12px; border-radius: 7px; cursor: pointer;
-  background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
-  font: inherit; font-size: 12.5px;
-}
-.btn:hover { border-color: #39414f; }
-.btn.primary { background: #24406e; border-color: #35558b; }
-.btn.primary:hover { background: #2a4a7e; }
-.btn.danger { color: var(--danger); border-color: #4a2a2a; background: #2a1c1c; }
-.btn.danger:hover { background: #3a2323; border-color: #6a3a3a; }
-
-.panel-actions { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 11px; }
-
-/* ------------------------------------------------------------- диалог */
+/* -------------------------------------------------------------- диалог */
 
 .modal {
-  position: fixed; inset: 0; z-index: 80; padding: 24px;
-  background: rgba(0,0,0,.62); display: grid; place-items: center;
+  position: fixed; inset: 0; z-index: var(--z-modal); padding: var(--sp-8);
+  background: rgba(0, 0, 0, .66); display: grid; place-items: center;
+  backdrop-filter: blur(2px);
 }
 .modal-box {
-  width: min(520px, 100%); background: var(--panel); border: 1px solid var(--line);
-  border-radius: 12px; padding: 18px 20px 16px;
-  box-shadow: 0 18px 50px rgba(0,0,0,.5);
+  width: min(520px, 100%); background: var(--s-1); border: 1px solid var(--line-2);
+  border-radius: var(--r-3); padding: var(--sp-7) var(--sp-7) var(--sp-6);
+  box-shadow: var(--sh-modal);
 }
-.modal-title { font-size: 15.5px; margin-bottom: 10px; }
-.modal-body { font-size: 13px; color: var(--text); max-height: 58vh; overflow-y: auto; }
-.modal-note { color: var(--muted); font-size: 12.5px; line-height: 1.6; margin-top: 9px; }
-.modal-note code, .modal-list code { font-family: var(--mono); color: #9fb2cc; }
-.modal-list { margin: 0 0 4px; padding-left: 20px; line-height: 1.75; font-size: 12.5px; }
-.modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.modal-title { font-size: var(--t-lg); margin-bottom: var(--sp-5); }
+.modal-body { font-size: var(--t-sm); color: var(--text); max-height: 58vh; overflow-y: auto; }
+.modal-note { color: var(--text-2); font-size: var(--t-sm); line-height: 1.65; margin-top: var(--sp-4); }
+.modal-note code, .modal-list code { font-family: var(--mono); color: var(--accent); }
+.modal-list { margin: 0 0 var(--sp-2); padding-left: var(--sp-7); line-height: 1.8; font-size: var(--t-sm); }
+.modal-foot { display: flex; justify-content: flex-end; gap: var(--sp-4); margin-top: var(--sp-6); }
 
-.modal-input {
-  width: 100%; margin-top: 10px; padding: 9px 11px; border-radius: 8px;
-  background: var(--bg); border: 1px solid var(--line); color: var(--text);
-  font: inherit; font-size: 13px; resize: vertical;
-}
-.modal-input:focus { outline: none; border-color: var(--accent); }
-.modal-input.mono { font-family: var(--mono); font-size: 12.5px; line-height: 1.6; }
+.modal-input { width: 100%; margin-top: var(--sp-4); }
+.modal-input.mono { font-family: var(--mono); font-size: var(--t-sm); }
 
 .warn-line {
-  margin-top: 9px; padding: 8px 11px; border-radius: 7px; font-size: 12.5px;
-  background: rgba(251,191,36,.09); border: 1px solid #4a3f22; color: #e4cf9a;
+  margin-top: var(--sp-4); padding: var(--sp-4) var(--sp-5); border-radius: var(--r-1);
+  background: var(--warn-soft); border: 1px solid var(--warn-line); color: #e6cf9c;
+  font-size: var(--t-sm); line-height: 1.6;
 }
 .warn-line code { font-family: var(--mono); }
 
 /* --------------------------------------------------------- уведомления */
 
 #toasts {
-  position: fixed; right: 18px; bottom: 18px; z-index: 90;
-  display: flex; flex-direction: column; gap: 8px; align-items: flex-end;
+  position: fixed; right: var(--sp-6); bottom: calc(var(--status) + var(--sp-5));
+  z-index: var(--z-toast);
+  display: flex; flex-direction: column; gap: var(--sp-4); align-items: flex-end;
   pointer-events: none;
 }
 .toast {
-  padding: 9px 14px; border-radius: 8px; font-size: 12.5px; max-width: 420px;
-  background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
-  box-shadow: 0 8px 24px rgba(0,0,0,.4);
-  animation: toast-in .18s ease;
+  padding: var(--sp-4) var(--sp-5); border-radius: var(--r-2);
+  font-size: var(--t-sm); max-width: 420px; line-height: 1.5;
+  background: var(--s-2); border: 1px solid var(--line-2); color: var(--text);
+  box-shadow: var(--sh-pop);
+  /* Цветная полоса слева, а не цветная рамка целиком: рамка на тёмном фоне
+     читается как обводка, полоса — как признак рода сообщения. */
+  border-left: 2px solid var(--text-3);
+  animation: toast-in .16s ease;
 }
-.toast.bad { border-color: #5a2b2b; color: #f4b4b4; }
-.toast.warn { border-color: #4a3f22; color: #e4cf9a; }
+.toast.ok { border-left-color: var(--ok); }
+.toast.bad { border-left-color: var(--danger); color: #f6bebc; }
+.toast.warn { border-left-color: var(--warn); color: #e6cf9c; }
 .toast.out { opacity: 0; transform: translateY(6px); transition: .25s; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
 
-/* ------------------------------------------------------------- узкий экран */
+/* --------------------------------------------------------- узкий экран */
 
 @media (max-width: 900px) {
-  :root { --rail: 62px; }
-  .nav-label, .rail-stat, #rail .brand span:not(.logo) { display: none; }
-  #rail .brand { justify-content: center; padding: 14px 0 12px; }
-  .nav-item { justify-content: center; padding: 10px 0; }
-  .nav-badge { display: none; }
-  .rail-foot { padding: 10px 6px; display: flex; justify-content: center; }
-  .rail-foot .live { margin-top: 0; }
-  .rail-foot .live-text { display: none; }
-  /* Раскладка вьюера из style.css была завязана на main, а он больше
-     не сетка — повторяем её здесь для раздела. */
-  #view-viewer { grid-template-columns: 1fr; grid-template-rows: 180px 1fr; }
-  #sidebar { border-right: none; border-bottom: 1px solid var(--line); }
+  :root { --rail: var(--rail-min); }
+  .nav-label, #rail .brand-name, .rail-toggle { display: none; }
+  #rail .brand { justify-content: center; padding: 0; }
+  .nav-item { justify-content: center; padding: 0; }
+  .nav-badge {
+    position: absolute; right: 5px; top: 5px;
+    padding: 0; width: 5px; height: 5px; border-radius: 50%;
+    background: var(--accent); color: transparent; overflow: hidden;
+  }
+  /* Подсказка по клавишам на узком экране лишняя: там и клавиатуры может
+     не быть, а место в строке состояния нужно счётчикам. */
+  #statusbar .st-hint { display: none; }
+  .scroll { padding: var(--sp-5) var(--sp-5) var(--sp-7); }
+  .toolbar { margin-left: calc(var(--sp-5) * -1); margin-right: calc(var(--sp-5) * -1); padding: var(--sp-4) var(--sp-5); }
 }

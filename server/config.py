@@ -13,6 +13,11 @@ OUTPUT_DIR = DATA / "output"
 CACHE_DIR = DATA / "cache"
 WEIGHTS_DIR = DATA / "weights"
 
+# Очередь заданий. Лежит в data/, а не в /tmp, по трём причинам сразу: её
+# читают три разных процесса, она обязана пережить перезагрузку, и смотреть в
+# неё удобно тем же ls, что и в остальную работу (см. server/jobs.py).
+JOBS_DIR = DATA / "jobs"
+
 BLENDER = Path(os.environ.get("PHOTO3D_BLENDER", "/opt/blender/blender"))
 BLENDER_SCRIPTS = ROOT / "pipeline" / "blender"
 
@@ -103,6 +108,12 @@ SPIN_FRAMES = int(os.environ.get("PHOTO3D_SPIN_FRAMES", "24"))
 RENDER_TIMEOUT_SEC = int(os.environ.get("PHOTO3D_RENDER_TIMEOUT", "300"))
 
 
+# Потолок ожидания задания вызывающей стороной. Больше самого долгого этапа
+# (генерация TRELLIS) с запасом на очередь: задание, поставленное позади
+# чужого, ждёт своей очереди, и падать по таймауту из-за этого нельзя.
+JOB_WAIT_SEC = int(os.environ.get("PHOTO3D_JOB_WAIT", "5400"))
+
+
 def ensure_dirs() -> None:
-    for d in (INPUT_DIR, OUTPUT_DIR, CACHE_DIR, WEIGHTS_DIR):
+    for d in (INPUT_DIR, OUTPUT_DIR, CACHE_DIR, WEIGHTS_DIR, JOBS_DIR):
         d.mkdir(parents=True, exist_ok=True)
