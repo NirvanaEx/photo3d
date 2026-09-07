@@ -1,15 +1,56 @@
 {
+  "m_258aeb": {
+    "bodies": 0,
+    "center": [
+      0.064,
+      0.004,
+      -0.003
+    ],
+    "elapsed_sec": 9.7,
+    "error": "",
+    "file": "assets/models/m_258aeb.glb",
+    "from": "m_258aeb",
+    "id": "m_258aeb",
+    "imported_at": 1785695276.6724906,
+    "maps": {
+      "albedo": 1,
+      "emission": 0,
+      "metallic": 1,
+      "normal": 0,
+      "roughness": 1
+    },
+    "materials": 1,
+    "mb": 19.1,
+    "meshes": 1,
+    "ok": true,
+    "scaled": {
+      "dst_mb": 19.98,
+      "factor": 8.9743,
+      "roots_wrapped": 1,
+      "src_mb": 19.98
+    },
+    "shapes": 0,
+    "size": [
+      8.856,
+      6.25,
+      9.004
+    ],
+    "surfaces": 1,
+    "triangles": 288780
+  },
   "m_61aabe": {
+    "bodies": 0,
     "center": [
       0.0,
       0.005,
       -0.008
     ],
-    "elapsed_sec": 5.0,
+    "elapsed_sec": 5.3,
     "error": "",
     "file": "assets/models/m_61aabe.glb",
+    "from": "m_61aabe",
     "id": "m_61aabe",
-    "imported_at": 1785666809.7047398,
+    "imported_at": 1785695294.860519,
     "maps": {
       "albedo": 2,
       "emission": 0,
@@ -21,6 +62,7 @@
     "mb": 47.1,
     "meshes": 1,
     "ok": true,
+    "shapes": 0,
     "size": [
       0.692,
       1.013,
@@ -70,6 +112,64 @@
     ],
     "surfaces": 2,
     "triangles": 20000
+  },
+  "m_classroom_game": {
+    "bodies": 1,
+    "center": [
+      -2.95,
+      0.6,
+      -6.5
+    ],
+    "elapsed_sec": 36.1,
+    "error": "",
+    "file": "assets/models/m_classroom_game.glb",
+    "from": "m_classroom",
+    "gameready": {
+      "cameras_dropped": 0,
+      "collider_mode": "colonly",
+      "collider_tris": 5000,
+      "lights_dropped": [
+        {
+          "color": [
+            1.0,
+            0.72,
+            0.45
+          ],
+          "dir_godot": [
+            0.872,
+            -0.156,
+            -0.464
+          ],
+          "energy_blender": 38.0,
+          "name": "sun",
+          "type": "SUN"
+        }
+      ],
+      "meshes": 317,
+      "tris_after": 13132,
+      "tris_before": 13132
+    },
+    "id": "m_classroom_game",
+    "imported_at": 1785680912.0815134,
+    "maps": {
+      "albedo": 56,
+      "emission": 0,
+      "metallic": 156,
+      "normal": 6,
+      "roughness": 156
+    },
+    "materials": 21,
+    "mb": 43.0,
+    "meshes": 317,
+    "ok": true,
+    "shapes": 1,
+    "size": [
+      13.9,
+      5.2,
+      29.0
+    ],
+    "surfaces": 317,
+    "triangles": 13132
   },
   "m_corridor": {
     "center": [

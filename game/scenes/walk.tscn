@@ -7,11 +7,12 @@
 ; месту: подбирать высоту руками пришлось бы заново после каждой правки
 ; локации.
 
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="PackedScene" path="res://assets/models/m_corridor_game.glb" id="1_location"]
 [ext_resource type="Script" path="res://scripts/player.gd" id="3_player"]
 [ext_resource type="Script" path="res://scripts/location.gd" id="4_location_fix"]
+[ext_resource type="Script" path="res://scripts/room_audio.gd" id="5_audio"]
 
 [sub_resource type="Environment" id="Environment_walk"]
 background_mode = 1
@@ -138,9 +139,18 @@ visibility_aabb = AABB(-3, -2, -9, 6, 4, 18)
 process_material = SubResource("Dust_proc")
 draw_pass_1 = SubResource("Dust_mesh")
 
+; Коридор гулкий: хвост длиннее классного, звук уходит вдоль стен и почти не
+; глохнет - мягкого здесь нет ничего, только штукатурка, плитка и стекло.
+[node name="Audio" type="Node" parent="."]
+script = ExtResource("5_audio")
+room_size = 0.82
+wet = 0.22
+
 [node name="Player" type="CharacterBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, -1.5)
 script = ExtResource("3_player")
+; Плитка, а не паркет: шаг суше и гаснет вдвое быстрее.
+footstep_surface = "tile"
 
 [node name="Shape" type="CollisionShape3D" parent="Player"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.85, 0)

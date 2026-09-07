@@ -1,0 +1,587 @@
+{
+  "audio": {
+    "birds_playing": true,
+    "events": [
+      {
+        "gait": "walk",
+        "landing": false,
+        "sample": 2,
+        "surface": "wood",
+        "time": 3.033,
+        "zone": "classroom"
+      },
+      {
+        "gait": "walk",
+        "landing": false,
+        "sample": 0,
+        "surface": "wood",
+        "time": 3.483,
+        "zone": "classroom"
+      },
+      {
+        "gait": "walk",
+        "landing": false,
+        "sample": 7,
+        "surface": "wood",
+        "time": 3.95,
+        "zone": "classroom"
+      },
+      {
+        "gait": "walk",
+        "landing": false,
+        "sample": 1,
+        "surface": "wood",
+        "time": 4.4,
+        "zone": "classroom"
+      },
+      {
+        "gait": "walk",
+        "landing": false,
+        "sample": 4,
+        "surface": "wood",
+        "time": 4.85,
+        "zone": "classroom"
+      },
+      {
+        "gait": "walk",
+        "landing": false,
+        "sample": 1,
+        "surface": "wood",
+        "time": 5.317,
+        "zone": "classroom"
+      },
+      {
+        "gait": "run",
+        "landing": false,
+        "sample": 1,
+        "surface": "wood",
+        "time": 6.267,
+        "zone": "classroom"
+      },
+      {
+        "gait": "run",
+        "landing": false,
+        "sample": 2,
+        "surface": "wood",
+        "time": 6.55,
+        "zone": "classroom"
+      },
+      {
+        "gait": "run",
+        "landing": false,
+        "sample": 4,
+        "surface": "wood",
+        "time": 6.833,
+        "zone": "classroom"
+      },
+      {
+        "gait": "run",
+        "landing": false,
+        "sample": 0,
+        "surface": "wood",
+        "time": 7.117,
+        "zone": "classroom"
+      },
+      {
+        "gait": "run",
+        "landing": false,
+        "sample": 3,
+        "surface": "wood",
+        "time": 7.383,
+        "zone": "classroom"
+      },
+      {
+        "gait": "walk",
+        "landing": false,
+        "sample": 7,
+        "surface": "wood",
+        "time": 9.883,
+        "zone": "classroom"
+      },
+      {
+        "gait": "walk",
+        "landing": false,
+        "sample": 5,
+        "surface": "tile",
+        "time": 12.817,
+        "zone": "corridor"
+      },
+      {
+        "gait": "walk",
+        "landing": false,
+        "sample": 2,
+        "surface": "tile",
+        "time": 13.267,
+        "zone": "corridor"
+      },
+      {
+        "gait": "walk",
+        "landing": false,
+        "sample": 6,
+        "surface": "tile",
+        "time": 13.733,
+        "zone": "corridor"
+      },
+      {
+        "gait": "run",
+        "landing": false,
+        "sample": 0,
+        "surface": "tile",
+        "time": 14.4,
+        "zone": "corridor"
+      },
+      {
+        "gait": "run",
+        "landing": false,
+        "sample": 4,
+        "surface": "tile",
+        "time": 14.683,
+        "zone": "corridor"
+      },
+      {
+        "gait": "run",
+        "landing": false,
+        "sample": 0,
+        "surface": "tile",
+        "time": 14.95,
+        "zone": "corridor"
+      },
+      {
+        "gait": "run",
+        "landing": false,
+        "sample": 4,
+        "surface": "tile",
+        "time": 15.233,
+        "zone": "corridor"
+      },
+      {
+        "gait": "run",
+        "landing": false,
+        "sample": 3,
+        "surface": "tile",
+        "time": 15.517,
+        "zone": "corridor"
+      },
+      {
+        "gait": "run",
+        "landing": false,
+        "sample": 1,
+        "surface": "tile",
+        "time": 15.8,
+        "zone": "corridor"
+      },
+      {
+        "gait": "run",
+        "landing": false,
+        "sample": 2,
+        "surface": "tile",
+        "time": 16.083,
+        "zone": "corridor"
+      },
+      {
+        "gait": "run",
+        "landing": false,
+        "sample": 4,
+        "surface": "tile",
+        "time": 16.35,
+        "zone": "corridor"
+      },
+      {
+        "gait": "walk",
+        "landing": false,
+        "sample": 6,
+        "surface": "gravel",
+        "time": 18.717,
+        "zone": "corridor"
+      },
+      {
+        "gait": "walk",
+        "landing": false,
+        "sample": 7,
+        "surface": "gravel",
+        "time": 19.167,
+        "zone": "garden"
+      },
+      {
+        "gait": "walk",
+        "landing": false,
+        "sample": 4,
+        "surface": "gravel",
+        "time": 21.933,
+        "zone": "garden"
+      },
+      {
+        "gait": "walk",
+        "landing": false,
+        "sample": 7,
+        "surface": "gravel",
+        "time": 22.4,
+        "zone": "garden"
+      },
+      {
+        "gait": "walk",
+        "landing": false,
+        "sample": 2,
+        "surface": "gravel",
+        "time": 22.85,
+        "zone": "garden"
+      },
+      {
+        "gait": "walk",
+        "landing": false,
+        "sample": 0,
+        "surface": "grass",
+        "time": 23.3,
+        "zone": "garden"
+      },
+      {
+        "gait": "walk",
+        "landing": false,
+        "sample": 3,
+        "surface": "grass",
+        "time": 23.767,
+        "zone": "garden"
+      },
+      {
+        "gait": "walk",
+        "landing": true,
+        "sample": 1,
+        "surface": "grass",
+        "time": 24.9,
+        "zone": "garden"
+      },
+      {
+        "gait": "run",
+        "landing": false,
+        "sample": 0,
+        "surface": "grass",
+        "time": 25.733,
+        "zone": "garden"
+      },
+      {
+        "gait": "run",
+        "landing": false,
+        "sample": 3,
+        "surface": "gravel",
+        "time": 26.017,
+        "zone": "garden"
+      },
+      {
+        "gait": "run",
+        "landing": false,
+        "sample": 2,
+        "surface": "gravel",
+        "time": 26.3,
+        "zone": "garden"
+      },
+      {
+        "gait": "walk",
+        "landing": false,
+        "sample": 3,
+        "surface": "gravel",
+        "time": 26.667,
+        "zone": "garden"
+      },
+      {
+        "gait": "walk",
+        "landing": false,
+        "sample": 4,
+        "surface": "gravel",
+        "time": 27.033,
+        "zone": "garden"
+      },
+      {
+        "gait": "walk",
+        "landing": false,
+        "sample": 5,
+        "surface": "gravel",
+        "time": 27.4,
+        "zone": "corridor"
+      },
+      {
+        "gait": "run",
+        "landing": false,
+        "sample": 0,
+        "surface": "tile",
+        "time": 30.05,
+        "zone": "corridor"
+      },
+      {
+        "gait": "run",
+        "landing": false,
+        "sample": 2,
+        "surface": "tile",
+        "time": 30.333,
+        "zone": "corridor"
+      },
+      {
+        "gait": "run",
+        "landing": false,
+        "sample": 0,
+        "surface": "tile",
+        "time": 30.617,
+        "zone": "corridor"
+      },
+      {
+        "gait": "walk",
+        "landing": false,
+        "sample": 7,
+        "surface": "tile",
+        "time": 30.983,
+        "zone": "corridor"
+      },
+      {
+        "gait": "walk",
+        "landing": false,
+        "sample": 4,
+        "surface": "tile",
+        "time": 32.9,
+        "zone": "corridor"
+      },
+      {
+        "gait": "walk",
+        "landing": false,
+        "sample": 3,
+        "surface": "tile",
+        "time": 33.6,
+        "zone": "corridor"
+      },
+      {
+        "gait": "walk",
+        "landing": false,
+        "sample": 2,
+        "surface": "wood",
+        "time": 34.05,
+        "zone": "corridor"
+      },
+      {
+        "gait": "walk",
+        "landing": false,
+        "sample": 4,
+        "surface": "wood",
+        "time": 34.517,
+        "zone": "classroom"
+      }
+    ],
+    "frames": 2177,
+    "frames_on_floor": 2123,
+    "missing": [],
+    "nature_cutoff_hz": 2336.83227539063,
+    "pools": {
+      "grass/run": 5,
+      "grass/walk": 8,
+      "gravel/run": 8,
+      "gravel/walk": 8,
+      "tile/run": 5,
+      "tile/walk": 8,
+      "wood/run": 5,
+      "wood/walk": 8
+    },
+    "reverb_wet": 0.121841602027416,
+    "room_playing": true,
+    "steps_played": 44,
+    "surface": "wood",
+    "zone": "classroom"
+  },
+  "checks": [
+    {
+      "detail": 1.64024984836578,
+      "name": "adult eye height",
+      "passed": true
+    },
+    {
+      "detail": 56.0,
+      "name": "natural field of view",
+      "passed": true
+    },
+    {
+      "detail": null,
+      "name": "three physical doors",
+      "passed": true
+    },
+    {
+      "detail": {
+        "grass/run": 5,
+        "grass/walk": 8,
+        "gravel/run": 8,
+        "gravel/walk": 8,
+        "tile/run": 5,
+        "tile/walk": 8,
+        "wood/run": 5,
+        "wood/walk": 8
+      },
+      "name": "all gait recordings loaded",
+      "passed": true
+    },
+    {
+      "detail": "(2.15, -0.000576, -1.217778)",
+      "name": "chair blocks player",
+      "passed": true
+    },
+    {
+      "detail": 4.65332937240601,
+      "name": "walking covers human-scale distance",
+      "passed": true
+    },
+    {
+      "detail": null,
+      "name": "wood detected automatically",
+      "passed": true
+    },
+    {
+      "detail": 5.58500909805298,
+      "name": "running faster with distinct gait",
+      "passed": true
+    },
+    {
+      "detail": null,
+      "name": "no footsteps when blocked",
+      "passed": true
+    },
+    {
+      "detail": "(3.522343, 0.000069, -1.25)",
+      "name": "closed class door blocks exit",
+      "passed": true
+    },
+    {
+      "detail": null,
+      "name": "ClassDoor101 targeted by view ray",
+      "passed": true
+    },
+    {
+      "detail": {
+        "activations": 1,
+        "blocked": 0,
+        "degrees": -96.9999923706055
+      },
+      "name": "ClassDoor101 opens via E interaction",
+      "passed": true
+    },
+    {
+      "detail": null,
+      "name": "walk through class doorway",
+      "passed": true
+    },
+    {
+      "detail": "(5.655674, 0.000935, -1.25)",
+      "name": "corridor floor and zone",
+      "passed": true
+    },
+    {
+      "detail": null,
+      "name": "corridor route to garden door",
+      "passed": true
+    },
+    {
+      "detail": null,
+      "name": "GardenDoor targeted by view ray",
+      "passed": true
+    },
+    {
+      "detail": {
+        "activations": 1,
+        "blocked": 0,
+        "degrees": 7.0
+      },
+      "name": "GardenDoor opens via E interaction",
+      "passed": true
+    },
+    {
+      "detail": null,
+      "name": "walk out into garden",
+      "passed": true
+    },
+    {
+      "detail": "gravel",
+      "name": "garden paving sounds",
+      "passed": true
+    },
+    {
+      "detail": 0.0128349550068378,
+      "name": "outdoor ambience and reduced echo",
+      "passed": true
+    },
+    {
+      "detail": null,
+      "name": "walk on grass",
+      "passed": true
+    },
+    {
+      "detail": "grass",
+      "name": "grass sounds automatic",
+      "passed": true
+    },
+    {
+      "detail": 0.453362509608269,
+      "name": "jump and land",
+      "passed": true
+    },
+    {
+      "detail": null,
+      "name": "return to garden doorway",
+      "passed": true
+    },
+    {
+      "detail": null,
+      "name": "enter open door threshold",
+      "passed": true
+    },
+    {
+      "detail": {
+        "blocked": 1,
+        "fraction": 1.0
+      },
+      "name": "door does not close through player",
+      "passed": true
+    },
+    {
+      "detail": null,
+      "name": "return along corridor",
+      "passed": true
+    },
+    {
+      "detail": null,
+      "name": "ClassDoor101B targeted by view ray",
+      "passed": true
+    },
+    {
+      "detail": {
+        "activations": 1,
+        "blocked": 0,
+        "degrees": -96.9999923706055
+      },
+      "name": "ClassDoor101B opens via E interaction",
+      "passed": true
+    },
+    {
+      "detail": null,
+      "name": "re-enter classroom",
+      "passed": true
+    },
+    {
+      "detail": null,
+      "name": "classroom acoustic zone restored",
+      "passed": true
+    },
+    {
+      "detail": null,
+      "name": "door closes when doorway clear",
+      "passed": true
+    },
+    {
+      "detail": {
+        "grass/run": true,
+        "grass/walk": true,
+        "gravel/run": true,
+        "gravel/walk": true,
+        "tile/run": true,
+        "tile/walk": true,
+        "wood/run": true,
+        "wood/walk": true
+      },
+      "name": "walk run and landing sounds exercised",
+      "passed": true
+    }
+  ],
+  "passed": true
+}

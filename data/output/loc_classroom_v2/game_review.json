@@ -1,0 +1,20 @@
+{
+  "game_detail": {
+    "draw_calls": 639.0,
+    "fps": 60.0,
+    "image": "D:\\Projects\\Personal\\photo3d\\data\\output\\loc_classroom_v2/game_detail.png",
+    "primitives": 3180700.0
+  },
+  "game_hero": {
+    "draw_calls": 663.0,
+    "fps": 60.0,
+    "image": "D:\\Projects\\Personal\\photo3d\\data\\output\\loc_classroom_v2/game_hero.png",
+    "primitives": 2982188.0
+  },
+  "game_reverse": {
+    "draw_calls": 575.0,
+    "fps": 60.0,
+    "image": "D:\\Projects\\Personal\\photo3d\\data\\output\\loc_classroom_v2/game_reverse.png",
+    "primitives": 3077134.0
+  }
+}

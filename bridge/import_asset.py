@@ -114,6 +114,26 @@ def _manifest_put(model_id: str, info: dict[str, Any]) -> None:
     os.replace(tmp, MANIFEST)
 
 
+def picked_scale(d: Path) -> float:
+    """Масштаб, подобранный человеком в прогулке. 1, если не подбирали.
+
+    Читается напрямую, а не через web.library: мост не должен зависеть от
+    веб-приложения ради одного числа - веб можно уронить, и импорт в игру
+    это заметить не должен.
+    """
+    f = d / "ui.json"
+    if not f.exists():
+        return 1.0
+    try:
+        data = json.loads(f.read_text(encoding="utf-8"))
+        value = float(data.get("scale") or 1)
+    except (OSError, ValueError, TypeError):
+        # Битый ui.json не повод не пустить модель в игру: поедет как есть,
+        # исходного размера.
+        return 1.0
+    return value if value > 0 else 1.0
+
+
 def import_asset(model_id: str | None = None, gameready: bool = False,
                  faces: int = 20000, collider: int = 1500) -> dict[str, Any]:
     """Перенести модель в проект игры.
@@ -123,6 +143,11 @@ def import_asset(model_id: str | None = None, gameready: bool = False,
     суффиксом -colonly, из которой импортёр Godot сам делает тело. Без этого
     по модели можно смотреть, но не ходить: 120 тысяч треугольников в физике
     неподъёмны.
+
+    Масштаб из ui.json применяется здесь же. Генератор нормирует всё в
+    единичный куб, и комната приезжает размером с табурет; число, которым это
+    лечится, человек подбирает глазами в прогулке. Без этого шага подбор
+    оставался бы внутри веба, а в сцене пришлось бы угадывать заново.
     """
     store = ModelStore()
     mid = store.resolve(model_id)
@@ -145,6 +170,17 @@ def import_asset(model_id: str | None = None, gameready: bool = False,
         prep = prepare(src, cooked, faces=faces, collider=collider)
         prep.pop("log", None)
         src = cooked
+
+    # Масштаб применяется ПОСЛЕ gameready, а не до: децимация и сборка
+    # оболочки считают в исходных единицах, и порог «сколько треугольников
+    # оставить» от размера не зависит вовсе.
+    scale = picked_scale(store.dir(mid))
+    scaled: dict[str, Any] = {}
+    if abs(scale - 1) > 1e-6:
+        from pipeline.glb_scale import scale_glb
+        out = config.CACHE_DIR / "scaled" / f"{name}.glb"
+        scaled = scale_glb(src, out, scale)
+        src = out
 
     config.GAME_ASSETS.mkdir(parents=True, exist_ok=True)
     dst = config.GAME_ASSETS / f"{name}.glb"
@@ -175,6 +211,8 @@ def import_asset(model_id: str | None = None, gameready: bool = False,
     }
     if prep:
         info["gameready"] = prep
+    if scaled:
+        info["scaled"] = scaled
     _manifest_put(name, info)
     return info
 
@@ -183,8 +221,13 @@ def describe(info: dict[str, Any]) -> str:
     maps = info.get("maps", {})
     have = ", ".join(k for k, v in maps.items() if v) or "нет ни одной"
     size = info.get("size", [0, 0, 0])
+    # Масштаб называется вслух: молча выросшая в девять раз модель выглядит
+    # как ошибка генерации, а не как применённая настройка.
+    grown = (f"  масштаб: x{info['scaled']['factor']} (подобран в прогулке)\n"
+             if info.get("scaled") else "")
     return (
         f"{info['id']} -> {info['file']} ({info['mb']} МБ, {info['elapsed_sec']} с)\n"
+        + grown +
         f"  мешей {info['meshes']}, поверхностей {info['surfaces']}, "
         f"треугольников {info['triangles']}, материалов {info['materials']}\n"
         f"  столкновения: тел {info.get('bodies', 0)}, "

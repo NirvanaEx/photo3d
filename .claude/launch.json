@@ -10,6 +10,16 @@
         "-m", "web.app"
       ],
       "port": 8765
+    },
+    {
+      "name": "photo3d-web-check",
+      "runtimeExecutable": "wsl.exe",
+      "runtimeArgs": [
+        "--cd", "/mnt/d/Develop/photo3d",
+        "-e", "/usr/bin/env", "PHOTO3D_WEB_PORT=8766",
+        "/opt/photo3d/venv/bin/python", "-m", "web.app"
+      ],
+      "port": 8766
     }
   ]
 }

@@ -1,0 +1,8 @@
+; Значки построек в PNG - см. tools/make_icons.gd.
+
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tools/make_icons.gd" id="1_icons"]
+
+[node name="MakeIcons" type="Node"]
+script = ExtResource("1_icons")

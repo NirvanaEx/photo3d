@@ -20,6 +20,11 @@ extends Node3D
 const PREFIX := "RESULT "
 const EYE := 1.65          # рост камеры в локации - тот же, что в прогулке
 const WARMUP := 10         # кадров на прогрев: текстуры доезжают не к первому
+# Со включённым SDFGI прогрев другой. Глобальное освещение считается не за
+# кадр: каскады заполняются постепенно, и на десятом кадре сцена ещё тёмная.
+# Замер на classroom.tscn: при 10 кадрах правая половина класса уходила в
+# черноту, и по такому снимку GI выглядел ошибкой, хотя просто не досчитался.
+const WARMUP_GI := 90
 
 
 var _cfg := {}
@@ -53,6 +58,14 @@ func _run() -> void:
 	var world: Node = packed.instantiate()
 	add_child(world)
 	await get_tree().process_frame       # дать _ready сцены отработать
+
+	# highlight=true подсвечивает ВСЕ зоны осмотра разом. В игре так не бывает
+	# - подсветка идёт за взглядом, - но проверить её иначе нечем: камера
+	# съёмки не игрок и ни на что не смотрит. Отладочный режим, назван так же.
+	if _cfg.get("highlight", false):
+		for node in world.find_children("*", "Area3D", true, false):
+			if node.has_method("highlight"):
+				node.highlight(true)
 
 	# HUD гасится целиком: подсказки «кликни, чтобы взять управление»
 	# адресованы человеку с мышью, а в кадре для агента и в склейке с
@@ -97,9 +110,19 @@ func _run() -> void:
 
 
 func _settle() -> void:
-	for i in WARMUP:
+	for i in (WARMUP_GI if _has_gi() else WARMUP):
 		await get_tree().process_frame
 	await RenderingServer.frame_post_draw
+
+
+func _has_gi() -> bool:
+	# Ищем среди WorldEnvironment сцены: ждать девяносто кадров там, где GI
+	# нет, значит вчетверо удлинить каждую съёмку без всякой пользы.
+	for node in get_tree().root.find_children("*", "WorldEnvironment", true, false):
+		var env: Environment = (node as WorldEnvironment).environment
+		if env != null and env.sdfgi_enabled:
+			return true
+	return false
 
 
 func _save(dir_path: String, name: String) -> void:
@@ -177,9 +200,15 @@ func _describe(root: Node, aabb: AABB) -> Dictionary:
 			continue
 		for s in mi.mesh.get_surface_count():
 			var arrays: Array = mi.mesh.surface_get_arrays(s)
-			var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
-			tris += idx.size() / 3 if idx.size() > 0 else \
-				(arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() / 3
+			# Индексов может не быть ВОВСЕ: у меша, собранного в коде из
+			# отдельных треугольников, вершины идут подряд, и Godot кладёт в
+			# ARRAY_INDEX null. Присваивание в типизированную переменную на
+			# этом падало, и съёмка любой процедурной сцены обрывалась молча.
+			var idx = arrays[Mesh.ARRAY_INDEX]
+			if idx is PackedInt32Array and (idx as PackedInt32Array).size() > 0:
+				tris += (idx as PackedInt32Array).size() / 3
+			else:
+				tris += (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() / 3
 	# Яркость источников, а не только их число. Пересвеченный кадр и кадр с
 	# потерянной текстурой выглядят одинаково белыми, и первым делом хочется
 	# знать, чем именно сцену залило - особенно когда свет приехал внутри GLB

@@ -1,0 +1,8 @@
+; Съёмка кадра вместе с интерфейсом - см. tools/uishot.gd.
+
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tools/uishot.gd" id="1_uishot"]
+
+[node name="UiShot" type="Node"]
+script = ExtResource("1_uishot")

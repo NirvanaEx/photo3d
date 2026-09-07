@@ -1,0 +1,362 @@
+[
+  {
+    "file": "steps\\wood\\walk\\00.ogg",
+    "duration": 0.238,
+    "peak": 0.3394,
+    "rms": 0.0517
+  },
+  {
+    "file": "steps\\wood\\walk\\01.ogg",
+    "duration": 0.284,
+    "peak": 0.3396,
+    "rms": 0.0472
+  },
+  {
+    "file": "steps\\wood\\walk\\02.ogg",
+    "duration": 0.243,
+    "peak": 0.3414,
+    "rms": 0.0514
+  },
+  {
+    "file": "steps\\wood\\walk\\03.ogg",
+    "duration": 0.284,
+    "peak": 0.3513,
+    "rms": 0.0469
+  },
+  {
+    "file": "steps\\wood\\walk\\04.ogg",
+    "duration": 0.248,
+    "peak": 0.3263,
+    "rms": 0.0503
+  },
+  {
+    "file": "steps\\wood\\walk\\05.ogg",
+    "duration": 0.284,
+    "peak": 0.3545,
+    "rms": 0.0466
+  },
+  {
+    "file": "steps\\wood\\walk\\06.ogg",
+    "duration": 0.233,
+    "peak": 0.3016,
+    "rms": 0.05
+  },
+  {
+    "file": "steps\\wood\\walk\\07.ogg",
+    "duration": 0.284,
+    "peak": 0.3641,
+    "rms": 0.0481
+  },
+  {
+    "file": "steps\\wood\\run\\00.ogg",
+    "duration": 0.094,
+    "peak": 0.1972,
+    "rms": 0.0412
+  },
+  {
+    "file": "steps\\wood\\run\\01.ogg",
+    "duration": 0.091,
+    "peak": 0.2038,
+    "rms": 0.0463
+  },
+  {
+    "file": "steps\\wood\\run\\02.ogg",
+    "duration": 0.097,
+    "peak": 0.2143,
+    "rms": 0.0482
+  },
+  {
+    "file": "steps\\wood\\run\\03.ogg",
+    "duration": 0.087,
+    "peak": 0.177,
+    "rms": 0.0366
+  },
+  {
+    "file": "steps\\wood\\run\\04.ogg",
+    "duration": 0.092,
+    "peak": 0.2102,
+    "rms": 0.0482
+  },
+  {
+    "file": "steps\\tile\\walk\\00.ogg",
+    "duration": 0.132,
+    "peak": 0.4224,
+    "rms": 0.0461
+  },
+  {
+    "file": "steps\\tile\\walk\\01.ogg",
+    "duration": 0.132,
+    "peak": 0.4011,
+    "rms": 0.0453
+  },
+  {
+    "file": "steps\\tile\\walk\\02.ogg",
+    "duration": 0.132,
+    "peak": 0.4063,
+    "rms": 0.0461
+  },
+  {
+    "file": "steps\\tile\\walk\\03.ogg",
+    "duration": 0.132,
+    "peak": 0.3896,
+    "rms": 0.0439
+  },
+  {
+    "file": "steps\\tile\\walk\\04.ogg",
+    "duration": 0.132,
+    "peak": 0.3966,
+    "rms": 0.0472
+  },
+  {
+    "file": "steps\\tile\\walk\\05.ogg",
+    "duration": 0.132,
+    "peak": 0.4073,
+    "rms": 0.0431
+  },
+  {
+    "file": "steps\\tile\\walk\\06.ogg",
+    "duration": 0.132,
+    "peak": 0.4004,
+    "rms": 0.0482
+  },
+  {
+    "file": "steps\\tile\\walk\\07.ogg",
+    "duration": 0.132,
+    "peak": 0.3912,
+    "rms": 0.0427
+  },
+  {
+    "file": "steps\\tile\\run\\00.ogg",
+    "duration": 0.077,
+    "peak": 0.1227,
+    "rms": 0.0226
+  },
+  {
+    "file": "steps\\tile\\run\\01.ogg",
+    "duration": 0.099,
+    "peak": 0.1216,
+    "rms": 0.0236
+  },
+  {
+    "file": "steps\\tile\\run\\02.ogg",
+    "duration": 0.099,
+    "peak": 0.1155,
+    "rms": 0.0224
+  },
+  {
+    "file": "steps\\tile\\run\\03.ogg",
+    "duration": 0.084,
+    "peak": 0.0952,
+    "rms": 0.0207
+  },
+  {
+    "file": "steps\\tile\\run\\04.ogg",
+    "duration": 0.085,
+    "peak": 0.1278,
+    "rms": 0.0226
+  },
+  {
+    "file": "steps\\grass\\walk\\00.ogg",
+    "duration": 0.243,
+    "peak": 0.3672,
+    "rms": 0.0686
+  },
+  {
+    "file": "steps\\grass\\walk\\01.ogg",
+    "duration": 0.243,
+    "peak": 0.3425,
+    "rms": 0.0677
+  },
+  {
+    "file": "steps\\grass\\walk\\02.ogg",
+    "duration": 0.243,
+    "peak": 0.3711,
+    "rms": 0.0695
+  },
+  {
+    "file": "steps\\grass\\walk\\03.ogg",
+    "duration": 0.243,
+    "peak": 0.359,
+    "rms": 0.0687
+  },
+  {
+    "file": "steps\\grass\\walk\\04.ogg",
+    "duration": 0.243,
+    "peak": 0.3841,
+    "rms": 0.0688
+  },
+  {
+    "file": "steps\\grass\\walk\\05.ogg",
+    "duration": 0.243,
+    "peak": 0.3516,
+    "rms": 0.0678
+  },
+  {
+    "file": "steps\\grass\\walk\\06.ogg",
+    "duration": 0.243,
+    "peak": 0.3618,
+    "rms": 0.0696
+  },
+  {
+    "file": "steps\\grass\\walk\\07.ogg",
+    "duration": 0.243,
+    "peak": 0.3613,
+    "rms": 0.067
+  },
+  {
+    "file": "steps\\grass\\run\\00.ogg",
+    "duration": 0.188,
+    "peak": 0.1595,
+    "rms": 0.0236
+  },
+  {
+    "file": "steps\\grass\\run\\01.ogg",
+    "duration": 0.173,
+    "peak": 0.3403,
+    "rms": 0.0467
+  },
+  {
+    "file": "steps\\grass\\run\\02.ogg",
+    "duration": 0.177,
+    "peak": 0.2945,
+    "rms": 0.0409
+  },
+  {
+    "file": "steps\\grass\\run\\03.ogg",
+    "duration": 0.164,
+    "peak": 0.139,
+    "rms": 0.0226
+  },
+  {
+    "file": "steps\\grass\\run\\04.ogg",
+    "duration": 0.144,
+    "peak": 0.2093,
+    "rms": 0.0253
+  },
+  {
+    "file": "steps\\gravel\\walk\\00.ogg",
+    "duration": 0.186,
+    "peak": 0.6559,
+    "rms": 0.0717
+  },
+  {
+    "file": "steps\\gravel\\walk\\01.ogg",
+    "duration": 0.104,
+    "peak": 0.3017,
+    "rms": 0.0712
+  },
+  {
+    "file": "steps\\gravel\\walk\\02.ogg",
+    "duration": 0.248,
+    "peak": 0.4905,
+    "rms": 0.0689
+  },
+  {
+    "file": "steps\\gravel\\walk\\03.ogg",
+    "duration": 0.155,
+    "peak": 0.6175,
+    "rms": 0.0684
+  },
+  {
+    "file": "steps\\gravel\\walk\\04.ogg",
+    "duration": 0.241,
+    "peak": 0.7086,
+    "rms": 0.0696
+  },
+  {
+    "file": "steps\\gravel\\walk\\05.ogg",
+    "duration": 0.226,
+    "peak": 0.6144,
+    "rms": 0.0722
+  },
+  {
+    "file": "steps\\gravel\\walk\\06.ogg",
+    "duration": 0.188,
+    "peak": 0.5234,
+    "rms": 0.0715
+  },
+  {
+    "file": "steps\\gravel\\walk\\07.ogg",
+    "duration": 0.23,
+    "peak": 0.6076,
+    "rms": 0.07
+  },
+  {
+    "file": "steps\\gravel\\run\\00.ogg",
+    "duration": 0.186,
+    "peak": 0.88,
+    "rms": 0.0954
+  },
+  {
+    "file": "steps\\gravel\\run\\01.ogg",
+    "duration": 0.104,
+    "peak": 0.4409,
+    "rms": 0.0997
+  },
+  {
+    "file": "steps\\gravel\\run\\02.ogg",
+    "duration": 0.248,
+    "peak": 0.6901,
+    "rms": 0.0967
+  },
+  {
+    "file": "steps\\gravel\\run\\03.ogg",
+    "duration": 0.155,
+    "peak": 0.8643,
+    "rms": 0.0957
+  },
+  {
+    "file": "steps\\gravel\\run\\04.ogg",
+    "duration": 0.241,
+    "peak": 0.88,
+    "rms": 0.0866
+  },
+  {
+    "file": "steps\\gravel\\run\\05.ogg",
+    "duration": 0.226,
+    "peak": 0.8594,
+    "rms": 0.1011
+  },
+  {
+    "file": "steps\\gravel\\run\\06.ogg",
+    "duration": 0.188,
+    "peak": 0.7451,
+    "rms": 0.1001
+  },
+  {
+    "file": "steps\\gravel\\run\\07.ogg",
+    "duration": 0.23,
+    "peak": 0.8513,
+    "rms": 0.0982
+  },
+  {
+    "file": "garden.ogg",
+    "duration": 29.488,
+    "peak": 0.88,
+    "rms": 0.0535
+  },
+  {
+    "file": "room.ogg",
+    "duration": 7.0,
+    "peak": 0.1033,
+    "rms": 0.0267
+  },
+  {
+    "file": "door_open.ogg",
+    "duration": 0.83,
+    "peak": 0.88,
+    "rms": 0.0896
+  },
+  {
+    "file": "door_close.ogg",
+    "duration": 0.841,
+    "peak": 0.88,
+    "rms": 0.0791
+  },
+  {
+    "file": "door_latch.ogg",
+    "duration": 0.328,
+    "peak": 0.88,
+    "rms": 0.09
+  }
+]

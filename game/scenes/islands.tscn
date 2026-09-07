@@ -1,0 +1,239 @@
+; Архипелаг: игра видом сверху. Каркас - карта островов, вода, камера,
+; курсор по клетке, точка старта.
+;
+; Сцена написана текстом и текстом же правится. Здесь ВНЕШНИЙ ВИД: небо,
+; солнце, вода, вид стартового флага, число островов. Всё, что считается, -
+; в scripts/islands/, вода и сетка земли - в shaders/.
+;
+; Запуск:
+;   C:\Tools\Godot\Godot_v4.7.1-stable_win64_console.exe --path D:\Develop\photo3d\game res://scenes/islands.tscn
+
+[gd_scene load_steps=15 format=3]
+
+[ext_resource type="Script" path="res://scripts/islands/island_world.gd" id="1_world"]
+[ext_resource type="Script" path="res://scripts/islands/rts_camera.gd" id="2_camera"]
+[ext_resource type="Shader" path="res://shaders/water.gdshader" id="3_water"]
+[ext_resource type="Script" path="res://scripts/islands/builder.gd" id="4_builder"]
+[ext_resource type="PackedScene" path="res://scenes/islands_hud.tscn" id="5_hud"]
+[ext_resource type="Shader" path="res://shaders/sky.gdshader" id="6_sky"]
+[ext_resource type="PackedScene" path="res://assets/kits/kaykit/castle.glb" id="7_castle"]
+[ext_resource type="Script" path="res://scripts/islands/citizens.gd" id="8_citizens"]
+
+[sub_resource type="ShaderMaterial" id="SkyMat"]
+shader = ExtResource("6_sky")
+shader_parameter/top_color = Color(0.11, 0.4, 0.84, 1)
+shader_parameter/mid_color = Color(0.36, 0.67, 0.95, 1)
+shader_parameter/horizon_color = Color(0.82, 0.92, 0.98, 1)
+shader_parameter/ground_color = Color(0.3, 0.52, 0.7, 1)
+shader_parameter/cloud_lit = Color(1, 0.99, 0.96, 1)
+shader_parameter/cloud_dark = Color(0.55, 0.63, 0.78, 1)
+shader_parameter/cloud_cover = 0.44
+shader_parameter/cloud_opacity = 0.92
+shader_parameter/cloud_scale = 1.25
+shader_parameter/cloud_speed = 0.004
+shader_parameter/sun_glow = 0.3
+
+[sub_resource type="Sky" id="Sky"]
+sky_material = SubResource("SkyMat")
+
+[sub_resource type="Environment" id="Env"]
+background_mode = 2
+sky = SubResource("Sky")
+ambient_light_source = 3
+; ВНИМАНИЕ: ambient_light_energy НЕ РАБОТАЕТ, пока sky_contribution равен 1.0
+; (значение по умолчанию). Весь заполняющий свет тогда приходит от неба, и
+; крутить energy бесполезно - проверено кадрами: 1.1, 0.55 и 0.05 давали
+; одинаковую картинку. Именно из-за этого тени от деревьев вымывались в ноль.
+; Управляемая доля - это доля НЕ от неба, её и убавляем.
+ambient_light_color = Color(0.42, 0.47, 0.56, 1)
+ambient_light_energy = 0.7
+ambient_light_sky_contribution = 0.1
+tonemap_mode = 3
+tonemap_white = 1.6
+ssao_enabled = true
+ssao_radius = 2.0
+ssao_intensity = 1.5
+ssao_power = 1.2
+; Непрямой свет по экрану: трава подкрашивает зелёным подножия деревьев и стен.
+; Дёшево имитирует переотражение, из-за отсутствия которого предметы выглядят
+; наклеенными на фон, а не стоящими в траве.
+ssil_enabled = true
+ssil_radius = 3.5
+ssil_intensity = 0.5
+ssil_sharpness = 0.94
+; Свечение слабое и с высоким порогом: светятся только барашки на воде, блик
+; солнца и огонь. Если опустить порог, вся трава начинает мылить кадр.
+glow_enabled = true
+glow_normalized = true
+glow_intensity = 0.55
+glow_strength = 1.0
+glow_bloom = 0.05
+glow_blend_mode = 1
+glow_hdr_threshold = 1.05
+glow_hdr_scale = 2.5
+glow_levels/2 = 1.0
+glow_levels/3 = 0.7
+glow_levels/4 = 0.4
+glow_levels/5 = 0.2
+; Туман слабый и только чтобы море не обрывалось резкой линией у горизонта.
+fog_enabled = true
+fog_light_color = Color(0.72, 0.87, 0.96, 1)
+; Плотность подобрана по кадру: море должно уходить в небо без видимого шва на
+; горизонте, но острова в трёхстах метрах обязаны читаться.
+fog_density = 0.0005
+adjustment_enabled = true
+adjustment_saturation = 1.16
+adjustment_contrast = 1.08
+
+; Наклона-сдвига здесь НЕТ, хотя он напрашивается: размытие дали превращает
+; вид сверху в макет. Пробовали - и убрали, сверившись с референсом (Dice
+; Kingdoms): там кадр резкий от переднего края до горизонта, и дальние острова
+; читаются как места, куда можно доплыть. Под размытием они превращались в
+; кашу, а весь мир - в один занятый делом угол.
+
+; Вода. Плоскость НАМНОГО больше карты (карта 205 м, плоскость 1000): её край
+; должен уходить за туман, иначе на горизонте виден шов между морем и небом.
+; Сетка частая нарочно - волны считаются в вершинах: 240 делений на 1000 м это
+; шаг 4.2 м при длине волны около 25 м.
+[sub_resource type="PlaneMesh" id="MeshSea"]
+size = Vector2(1000, 1000)
+subdivide_width = 240
+subdivide_depth = 240
+
+[sub_resource type="ShaderMaterial" id="MatSea"]
+render_priority = 0
+shader = ExtResource("3_water")
+shader_parameter/map_half = 102.4
+; Эти три подменяются из island_world.gd под фактическую карту - здесь стоят
+; лишь затем, чтобы шейдер не читал мусор до первой сборки мира.
+shader_parameter/cell_size = 2.56
+shader_parameter/tex_size = 81.0
+shader_parameter/shallow_color = Color(0.33, 0.81, 0.87, 1)
+shader_parameter/deep_color = Color(0.06, 0.42, 0.72, 1)
+shader_parameter/foam_color = Color(1, 1, 1, 1)
+; Глубина, на которой вода добирает свой цвет. Было 4.5 - и остров окружало
+; бледное бирюзовое поле метров в двадцать шириной, съедавшее кромку. У
+; референса мелководье - узкая полоска, дальше сразу насыщенная синь.
+shader_parameter/depth_scale = 2.2
+shader_parameter/foam_width = 1.2
+shader_parameter/wave_speed = 0.55
+shader_parameter/wave_height = 0.22
+shader_parameter/ripple = 0.32
+; Пена жмётся к берегу: кромка метровая, прибой не дальше семи метров. Было
+; двенадцать - белый ореол читался как свечение вокруг острова, а не как волны.
+shader_parameter/foam_edge = 1.0
+shader_parameter/surf_reach = 7.0
+shader_parameter/surf_length = 7.0
+shader_parameter/surf_speed = 2.6
+
+[node name="Islands" type="Node3D"]
+
+[node name="WorldEnv" type="WorldEnvironment" parent="."]
+environment = SubResource("Env")
+
+; Солнце под 38°, а было 60°.
+;
+; Под 60° тень падает почти отвесно: дерево стояло в собственной кляксе, дом -
+; в своей, и предметы выглядели наклеенными на фон. Высокое солнце ставили,
+; чтобы отвёрнутый склон не уходил в сумрак, но лечится это рассеянным светом,
+; а не высотой солнца. Тень длиной с предмет - главный признак, по которому
+; глаз понимает, что вещь СТОИТ на земле.
+; Матрица записана СТРОКАМИ (docs/PITFALLS.md).
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.8, -0.3693, 0.4727, 0, 0.7879, 0.6157, -0.5999, -0.4926, 0.6304, 0, 40, 0)
+light_color = Color(1, 0.96, 0.88, 1)
+light_energy = 1.15
+; Угловой размер солнца: у настоящего 0.5°, здесь нарочно больше. Полутень
+; растёт с расстоянием от предмета - тень дерева у ствола резкая, у кроны
+; мягкая. Это единственный дешёвый признак, по которому глаз отличает
+; настоящий свет от нарисованного.
+light_angular_distance = 1.1
+light_specular = 0.6
+shadow_enabled = true
+shadow_bias = 0.02
+shadow_normal_bias = 1.0
+shadow_blur = 0.7
+shadow_opacity = 0.88
+directional_shadow_mode = 2
+directional_shadow_split_1 = 0.06
+directional_shadow_split_2 = 0.16
+directional_shadow_split_3 = 0.42
+directional_shadow_blend_splits = true
+directional_shadow_max_distance = 300.0
+
+; Море - одна плоскость на весь мир. Тени не отбрасывает: прозрачный материал
+; в тени считается сплошным, и вся карта ушла бы под плиту мрака.
+[node name="Sea" type="MeshInstance3D" parent="."]
+cast_shadow = 0
+mesh = SubResource("MeshSea")
+surface_material_override/0 = SubResource("MatSea")
+
+; Постройки. Стоят в дереве ВЫШЕ мира нарочно: мир на своём _ready просит их
+; очиститься под новую карту, а к этому моменту узел должен быть готов.
+[node name="Buildings" type="Node3D" parent="."]
+script = ExtResource("4_builder")
+
+
+; Горожане. Отдельным узлом, а не внутри построек: они не собственность здания,
+; ходят между всеми и переживают снос любого.
+[node name="Citizens" type="Node3D" parent="."]
+script = ExtResource("8_citizens")
+world_path = NodePath("../Archipelago")
+builder_path = NodePath("../Buildings")
+
+[node name="Archipelago" type="Node3D" parent="."]
+script = ExtResource("1_world")
+island_count = 5
+world_seed = 0
+camera_path = NodePath("../CameraRig")
+sea_path = NodePath("../Sea")
+start_point_path = NodePath("../StartPoint")
+builder_path = NodePath("../Buildings")
+
+[node name="Ground" type="MeshInstance3D" parent="Archipelago"]
+
+[node name="Trees" type="Node3D" parent="Archipelago"]
+
+[node name="Props" type="Node3D" parent="Archipelago"]
+
+[node name="CellCursor" type="MeshInstance3D" parent="Archipelago"]
+cast_shadow = 0
+
+; Точка старта - ЗАМОК, а не флажок на шесте.
+;
+; Шест с полотнищем был заглушкой из примитивов, и рядом с домами из набора он
+; выглядел ровно тем, чем был. Замок - модель того же набора: старт сразу
+; читается столицей, вокруг которой растёт посёлок, а не отметкой на карте.
+; На нужную клетку узел двигает скрипт мира.
+[node name="StartPoint" type="Node3D" parent="."]
+visible = false
+
+[node name="Castle" parent="StartPoint" instance=ExtResource("7_castle")]
+transform = Transform3D(1.5, 0, 0, 0, 1.5, 0, 0, 0, 1.5, 0, 0, 0)
+
+[node name="CameraRig" type="Node3D" parent="."]
+script = ExtResource("2_camera")
+pan_speed = 22.0
+zoom_min = 14.0
+zoom_max = 165.0
+
+; Наклон камеры: поворот вокруг X на -52°. Матрица записана СТРОКАМИ
+; (docs/PITFALLS.md) - если записать её осями-столбцами, получится поворот в
+; обратную сторону и камера уедет под воду.
+[node name="Arm" type="Node3D" parent="CameraRig"]
+transform = Transform3D(1, 0, 0, 0, 0.6157, 0.788, 0, -0.788, 0.6157, 0, 0, 0)
+
+[node name="Camera3D" type="Camera3D" parent="CameraRig/Arm"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 46)
+fov = 40.0
+near = 0.5
+far = 1400.0
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="Interface" parent="HUD" instance=ExtResource("5_hud")]
+world_path = NodePath("../../Archipelago")
+camera_path = NodePath("../../CameraRig")
+builder_path = NodePath("../../Buildings")
+
+

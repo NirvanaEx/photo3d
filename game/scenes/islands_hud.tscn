@@ -1,0 +1,199 @@
+; Интерфейс «Архипелага»: раскладка панелей.
+;
+; Здесь только КАРКАС - где что висит. Содержимое (чипы ресурсов, карточки
+; построек, мини-карта) и всё оформление собирает scripts/islands/hud.gd:
+; стиль один на пять панелей, и держать его в пяти местах значит однажды
+; поправить четыре.
+;
+; Корень пропускает мышь насквозь (mouse_filter = 2), панели её ловят.
+; Отсюда простое правило: щелчок по панели не ставит дом.
+
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/islands/hud.gd" id="1_hud"]
+
+[node name="HUD" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1_hud")
+
+; ------------------------------------------------------------- запасы, слева
+
+[node name="Top" type="PanelContainer" parent="."]
+layout_mode = 1
+offset_left = 16.0
+offset_top = 14.0
+offset_right = 16.0
+offset_bottom = 14.0
+grow_horizontal = 1
+grow_vertical = 1
+
+[node name="Pad" type="MarginContainer" parent="Top"]
+layout_mode = 2
+theme_override_constants/margin_left = 18
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 18
+theme_override_constants/margin_bottom = 10
+
+[node name="Resources" type="HBoxContainer" parent="Top/Pad"]
+layout_mode = 2
+theme_override_constants/separation = 20
+
+; -------------------------------------------------------- мини-карта, справа
+
+[node name="MapPanel" type="PanelContainer" parent="."]
+layout_mode = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -16.0
+offset_top = 14.0
+offset_right = -16.0
+offset_bottom = 14.0
+grow_horizontal = 0
+grow_vertical = 1
+
+[node name="Pad" type="MarginContainer" parent="MapPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="Column" type="VBoxContainer" parent="MapPanel/Pad"]
+layout_mode = 2
+theme_override_constants/separation = 9
+
+; Квадрат ЖЁСТКО: ширину столбца задаёт ряд кнопок под картой, и без
+; size_flags = 4 (сжаться и встать по центру) карта растягивалась в
+; прямоугольник, а накладка поверх съезжала относительно неё.
+[node name="MapBox" type="PanelContainer" parent="MapPanel/Pad/Column"]
+custom_minimum_size = Vector2(200, 200)
+layout_mode = 2
+size_flags_horizontal = 4
+
+[node name="Minimap" type="TextureRect" parent="MapPanel/Pad/Column/MapBox"]
+layout_mode = 2
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+; Накладка поверх карты: рамка обзора, старт и постройки. Рисуется кодом
+; (hud.gd), потому что двигается каждый кадр, а сама карта - нет.
+[node name="Overlay" type="Control" parent="MapPanel/Pad/Column/MapBox"]
+layout_mode = 2
+tooltip_text = "щелчок — перенести взгляд"
+
+[node name="Seed" type="Label" parent="MapPanel/Pad/Column"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.702, 0.604, 0.463, 1)
+theme_override_font_sizes/font_size = 12
+text = "seed —"
+
+[node name="Tools" type="HBoxContainer" parent="MapPanel/Pad/Column"]
+layout_mode = 2
+theme_override_constants/separation = 7
+
+[node name="Keys" type="Label" parent="MapPanel/Pad/Column"]
+custom_minimum_size = Vector2(244, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.624, 0.541, 0.42, 1)
+theme_override_font_sizes/font_size = 11
+text = "управление"
+autowrap_mode = 3
+
+; ------------------------------------------------------- постройки, по центру
+
+[node name="Build" type="PanelContainer" parent="."]
+layout_mode = 1
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = 0.0
+offset_top = -16.0
+offset_right = 0.0
+offset_bottom = -16.0
+grow_horizontal = 2
+grow_vertical = 0
+
+[node name="Pad" type="MarginContainer" parent="Build"]
+layout_mode = 2
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 10
+
+[node name="Column" type="VBoxContainer" parent="Build/Pad"]
+layout_mode = 2
+theme_override_constants/separation = 9
+
+[node name="Buttons" type="HBoxContainer" parent="Build/Pad/Column"]
+layout_mode = 2
+theme_override_constants/separation = 9
+alignment = 1
+
+[node name="Hint" type="Label" parent="Build/Pad/Column"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.702, 0.604, 0.463, 1)
+theme_override_font_sizes/font_size = 13
+text = "выбери постройку и щёлкни по клетке"
+horizontal_alignment = 1
+
+; ---------------------------------------------------- клетка под курсором
+
+[node name="Info" type="PanelContainer" parent="."]
+layout_mode = 1
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = -16.0
+offset_right = 16.0
+offset_bottom = -16.0
+grow_horizontal = 1
+grow_vertical = 0
+
+[node name="Pad" type="MarginContainer" parent="Info"]
+layout_mode = 2
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 8
+
+[node name="Text" type="Label" parent="Info/Pad"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.957, 0.902, 0.784, 1)
+theme_override_font_sizes/font_size = 14
+text = "наведи на клетку"
+
+; Всплывающее сообщение: отказ («нужен берег рядом») или подтверждение.
+; Висит над панелью построек - там, куда смотрят в момент нажатия.
+[node name="Toast" type="PanelContainer" parent="."]
+layout_mode = 1
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = 0.0
+offset_top = -168.0
+offset_right = 0.0
+offset_bottom = -168.0
+grow_horizontal = 2
+grow_vertical = 0
+
+[node name="Pad" type="MarginContainer" parent="Toast"]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 8
+
+[node name="Text" type="Label" parent="Toast/Pad"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "—"
+horizontal_alignment = 1

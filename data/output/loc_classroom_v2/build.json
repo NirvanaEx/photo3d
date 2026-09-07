@@ -1,0 +1,9 @@
+{
+  "glb": "D:\\Projects\\Personal\\photo3d\\game\\assets\\models\\classroom_v2.glb",
+  "size_mb": 53.22,
+  "draw_meshes": 40,
+  "collision_meshes": 1,
+  "blend": "D:\\Projects\\Personal\\photo3d\\data\\output\\loc_classroom_v2\\classroom_v2.blend",
+  "render": "D:\\Projects\\Personal\\photo3d\\data\\output\\loc_classroom_v2\\classroom_v2.png",
+  "detail": "D:\\Projects\\Personal\\photo3d\\data\\output\\loc_classroom_v2\\classroom_v2_detail.png"
+}

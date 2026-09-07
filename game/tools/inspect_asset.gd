@@ -35,6 +35,11 @@ func _initialize() -> void:
 	var root: Node = packed.instantiate()
 	var meshes: Array[MeshInstance3D] = []
 	_walk(root, meshes)
+	# Габариты считаются от КОРНЯ сцены, а не по собственной трансформации
+	# каждого меша: масштаб может стоять на узле-родителе (так его вписывает
+	# pipeline/glb_scale.py), и mi.transform о нём ничего не знает. Симптом
+	# был бы тихий и обидный - модель в сцене девятиметровая, а отчёт уверяет,
+	# что метровая, и по нему считается высота, на которой её ставить.
 
 	var tris := 0
 	var surfaces := 0
@@ -47,7 +52,7 @@ func _initialize() -> void:
 		var mesh: Mesh = mi.mesh
 		if mesh == null:
 			continue
-		var box: AABB = mi.transform * mesh.get_aabb()
+		var box: AABB = _xform_to_root(mi, root) * mesh.get_aabb()
 		aabb = box if first else aabb.merge(box)
 		first = false
 		for s in mesh.get_surface_count():
@@ -109,6 +114,22 @@ func _walk(node: Node, out: Array[MeshInstance3D]) -> void:
 		out.append(node)
 	for c in node.get_children():
 		_walk(c, out)
+
+
+func _xform_to_root(node: Node3D, root: Node) -> Transform3D:
+	# Своя сборка вместо global_transform: сцена здесь только инстанцирована и
+	# в дерево не добавлена, а полагаться на глобальные координаты вне дерева
+	# не стоит. Поднимаемся до корня включительно - у него тоже может быть
+	# собственная трансформация.
+	var t := Transform3D.IDENTITY
+	var n: Node = node
+	while n != null:
+		if n is Node3D:
+			t = (n as Node3D).transform * t
+		if n == root:
+			break
+		n = n.get_parent()
+	return t
 
 
 func _emit(data: Dictionary) -> void:

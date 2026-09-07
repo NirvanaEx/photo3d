@@ -1,0 +1,26 @@
+{
+  "school_game_classroom": {
+    "draw_calls": 1269.0,
+    "fps": 60.0,
+    "image": "D:\\Projects\\Personal\\photo3d\\data\\output\\loc_classroom_v2/school_game_classroom.png",
+    "primitives": 6803208.0
+  },
+  "school_game_corridor": {
+    "draw_calls": 1441.0,
+    "fps": 60.0,
+    "image": "D:\\Projects\\Personal\\photo3d\\data\\output\\loc_classroom_v2/school_game_corridor.png",
+    "primitives": 6768340.0
+  },
+  "school_game_doorway": {
+    "draw_calls": 1143.0,
+    "fps": 60.0,
+    "image": "D:\\Projects\\Personal\\photo3d\\data\\output\\loc_classroom_v2/school_game_doorway.png",
+    "primitives": 6231866.0
+  },
+  "school_game_garden": {
+    "draw_calls": 666.0,
+    "fps": 60.0,
+    "image": "D:\\Projects\\Personal\\photo3d\\data\\output\\loc_classroom_v2/school_game_garden.png",
+    "primitives": 4718758.0
+  }
+}

@@ -89,7 +89,39 @@ func _physics_process(_delta: float) -> void:
 			"steps": _steps,
 			"track": _track,
 			"collision": _collision,
+			# Звук проверяется тем же прогоном: в --headless слушать некому,
+			# а беззвучная ходьба и ходьба с пустым аудиодрайвером выглядят
+			# одинаково. Число сыгранных шагов должно примерно совпадать с
+			# пройденным путём, делённым на длину шага.
+			"audio": _player.audio_report() if _player.has_method("audio_report")
+					 else {"error": "у игрока нет audio_report"},
+			# Зоны осмотра с расстоянием от старта: так видно, что они вообще
+			# в сцене и стоят там, куда можно дойти. Пустой список при живой
+			# разметке в .tscn означает, что скрипт к узлам не привязался.
+			"look": _lookables(),
 		})
+
+
+func _lookables() -> Array:
+	var out: Array = []
+	for node in _all_areas(self, []):
+		if node is Interactable:
+			var item := node as Interactable
+			out.append({
+				"title": item.title,
+				"reach": item.reach,
+				"from_start_m": snappedf(item.global_position.distance_to(_start), 0.01),
+				"has_detail": not item.detail.is_empty(),
+			})
+	return out
+
+
+func _all_areas(node: Node, acc: Array) -> Array:
+	if node is Area3D:
+		acc.append(node)
+	for c in node.get_children():
+		_all_areas(c, acc)
+	return acc
 
 
 func _collisions(root: Node) -> Array:

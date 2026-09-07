@@ -57,3 +57,21 @@ game/assets/models/*
 Thumbs.db
 .vscode/
 .idea/
+
+# Снимок игровых сцен: модели и исходники храним через Git LFS.
+# Кэши движка, веса, входные фотографии и прочие рабочие задания остаются локально.
+!game/assets/models/*
+!game/assets/kits/**/*.glb
+!game/assets/kits/**/*.gltf
+!data/assets/**/*.gltf
+!data/output/loc_classroom/
+!data/output/loc_classroom/**
+!data/output/loc_classroom_v2/
+!data/output/loc_classroom_v2/**
+!data/output/loc_classroom_v2_before_expansion/
+!data/output/loc_classroom_v2_before_expansion/**
+!data/output/loc_corridor/
+!data/output/loc_corridor/**
+!data/textures/
+!data/textures/**
+*.blend1
